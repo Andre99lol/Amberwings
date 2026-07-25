@@ -39,7 +39,13 @@
 </section>
 
 <section class="list-section">
-  <h2>Articoli esistenti</h2>
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+    <h2>Articoli esistenti</h2>
+    <!-- NUOVO PULSANTE SCARICA JSON -->
+    <button id="downloadJsonBtn" style="background:#4CAF50; color:white; border:none; padding:10px 15px; border-radius:5px; cursor:pointer; font-weight:bold; margin-bottom:10px;">
+      📥 Scarica prodotti.json per GitHub
+    </button>
+  </div>
   <ul id="itemList"></ul>
 </section>
 
@@ -252,7 +258,6 @@
       if (imageUrl) {
         items[index].image = imageUrl;
       }
-      // Altrimenti mantieni l'immagine esistente
 
       document.getElementById('message').textContent = '✅ Articolo modificato!';
       
@@ -295,7 +300,6 @@
       };
       reader.readAsDataURL(file);
     } else {
-      // Se non c'è file, mostra l'immagine esistente (se in modifica)
       const editId = document.getElementById('editId').value;
       if (editId) {
         const items = loadItems();
@@ -313,6 +317,46 @@
       }
     }
   });
+
+  // ----- PULSANTE DOWNLOAD JSON -----
+  document.getElementById('downloadJsonBtn').addEventListener('click', () => {
+    const items = loadItems();
+    if (items.length === 0) {
+      alert('Non ci sono articoli da scaricare.');
+      return;
+    }
+    
+    // Converte l'array di oggetti in stringa JSON formattata
+    const jsonStr = JSON.stringify(items, null, 2);
+    
+    // Crea un file scaricabile al volo
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'prodotti.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ----- CARICA PRODOTTI INIZIALI DA prodotti.json SE LOCALSTORAGE È VUOTO -----
+  async function initItems() {
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      try {
+        const res = await fetch('prodotti.json');
+        if (res.ok) {
+          const data = await res.json();
+          saveItems(data);
+        }
+      } catch (err) {
+        console.log('Nessun file prodotti.json trovato o errore nel caricamento iniziale.');
+      }
+    }
+    renderList();
+  }
 
   // ----- PULSANTE ANNULLA -----
   document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
@@ -332,7 +376,7 @@
   }
 
   // ----- INIT -----
-  document.addEventListener('DOMContentLoaded', renderList);
+  document.addEventListener('DOMContentLoaded', initItems);
 </script>
 </body>
 </html>
