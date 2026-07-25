@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Area Privata</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+</head>
+<body>
+
+<header>
+  <h1>🔐 Area Privata</h1>
+  <nav>
+    <a href="index.html">Vetrina</a>
+    <a href="#" id="logoutLink">Logout</a>
+  </nav>
+</header>
+
+<section class="form-section">
+  <h2 id="formTitle">➕ Aggiungi nuovo articolo</h2>
+  <form id="addForm">
+    <input type="hidden" id="editId" value="" />
+    <input type="text" id="name" placeholder="Nome *" required />
+    <input type="text" id="description" placeholder="Descrizione" />
+    <input type="number" id="price" placeholder="Prezzo" step="0.01" />
+    
+    <input type="file" id="image" accept="image/*" />
+    <small style="display:block; margin-bottom:12px; color:#888;">
+      Carica un'immagine (lascia vuoto per mantenere quella esistente)
+    </small>
+    <div id="imagePreview" style="margin-top:8px;"></div>
+    <div id="uploadStatus" style="margin-top:8px; color:#666;"></div>
+    
+    <button type="submit" id="submitBtn">➕ Aggiungi</button>
+    <button type="button" id="cancelBtn" style="display:none; background:#666;">❌ Annulla</button>
+  </form>
+  <div id="message"></div>
+</section>
+
+<section class="list-section">
+  <h2>Articoli esistenti</h2>
+  <ul id="itemList"></ul>
+</section>
+
+<footer>&copy; 2025 - Gestione articoli</footer>
+
+<script>
+  // ----- CONFIGURAZIONE CLOUDINARY -----
+  const CLOUDINARY_CLOUD_NAME = 't6qrribf';
+  const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
+  
+  const STORAGE_KEY = 'shopItems';
+  const SESSION_KEY = 'loggedIn';
+
+  // ----- PROTEGGI PAGINA -----
+  if (localStorage.getItem(SESSION_KEY) !== 'true') {
+    window.location.href = 'login.html';
+  }
+
+  // ----- FUNZIONI DATI -----
+  function loadItems() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  }
+
+  function saveItems(items) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
+
+  // ----- CARICA IMMAGINE SU CLOUDINARY -----
+  async function uploadToCloudinary(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Errore nel caricamento su Cloudinary');
+      }
+
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error('Errore upload Cloudinary:', error);
+      throw error;
+    }
+  }
+
+  // ----- RENDER LISTA ADMIN (CON PULSANTI MODIFICA) -----
+  function renderList() {
+    const items = loadItems();
+    const list = document.getElementById('itemList');
+    if (items.length === 0) {
+      list.innerHTML = '<li>Nessun articolo presente.</li>';
+      return;
+    }
+    list.innerHTML = items.map(item => `
+      <li data-id="${item.id}">
+        <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
+        ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-left:10px;">` : ''}
+        <div style="margin-top:5px;">
+          <button class="edit-btn" data-id="${item.id}" style="background:#2196F3;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">
+            ✏️ Modifica
+          </button>
+          <button class="delete-btn" data-id="${item.id}" style="background:#f44336;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">
+            🗑️ Rimuovi
+          </button>
+        </div>
+      </li>
+    `).join('');
+
+    // Eventi per i pulsanti Modifica
+    document.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const id = parseInt(this.dataset.id);
+        editItem(id);
+      });
+    });
+
+    // Eventi per i pulsanti Rimuovi
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const id = parseInt(this.dataset.id);
+        removeItem(id);
+      });
+    });
+  }
+
+  // ----- MODIFICA ARTICOLO (CARICA I DATI NEL FORM) -----
+  function editItem(id) {
+    const items = loadItems();
+    const item = items.find(i => i.id === id);
+    
+    if (!item) {
+      alert('Articolo non trovato!');
+      return;
+    }
+
+    // Popola il form con i dati esistenti
+    document.getElementById('editId').value = item.id;
+    document.getElementById('name').value = item.name;
+    document.getElementById('description').value = item.description || '';
+    document.getElementById('price').value = item.price;
+    
+    // Mostra anteprima dell'immagine esistente
+    const preview = document.getElementById('imagePreview');
+    if (item.image) {
+      preview.innerHTML = `
+        <div>
+          <p style="font-size:12px;color:#666;margin-bottom:4px;">Immagine attuale:</p>
+          <img src="${escapeHtml(item.image)}" style="max-width:100px; max-height:100px; border-radius:8px; border:1px solid #ddd; padding:4px;">
+          <p style="font-size:11px;color:#999;margin-top:4px;">Carica una nuova immagine per sostituirla</p>
+        </div>
+      `;
+    } else {
+      preview.innerHTML = '';
+    }
+
+    // Cambia il titolo e il pulsante
+    document.getElementById('formTitle').textContent = '✏️ Modifica articolo';
+    document.getElementById('submitBtn').textContent = '💾 Salva modifiche';
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+    document.getElementById('message').textContent = '';
+    document.getElementById('uploadStatus').textContent = '';
+
+    // Scrolla al form
+    document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ----- ANNULLA MODIFICA -----
+  function cancelEdit() {
+    document.getElementById('addForm').reset();
+    document.getElementById('editId').value = '';
+    document.getElementById('imagePreview').innerHTML = '';
+    document.getElementById('uploadStatus').textContent = '';
+    document.getElementById('formTitle').textContent = '➕ Aggiungi nuovo articolo';
+    document.getElementById('submitBtn').textContent = '➕ Aggiungi';
+    document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('message').textContent = '';
+  }
+
+  // ----- RIMUOVI ARTICOLO -----
+  function removeItem(id) {
+    if (!confirm('Rimuovere questo articolo?')) return;
+    let items = loadItems();
+    items = items.filter(item => item.id !== id);
+    saveItems(items);
+    renderList();
+    cancelEdit();
+  }
+
+  // ----- AGGIUNGI/MODIFICA ARTICOLO -----
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const editId = document.getElementById('editId').value;
+    const name = document.getElementById('name').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const price = parseFloat(document.getElementById('price').value);
+    const fileInput = document.getElementById('image');
+    const file = fileInput.files[0];
+    const statusDiv = document.getElementById('uploadStatus');
+
+    if (!name) {
+      document.getElementById('message').textContent = '❌ Nome obbligatorio.';
+      return;
+    }
+
+    let imageUrl = '';
+
+    // Se c'è un file, carica su Cloudinary
+    if (file) {
+      statusDiv.textContent = '⏳ Caricamento su Cloudinary...';
+      statusDiv.style.color = '#ff9800';
+      
+      try {
+        imageUrl = await uploadToCloudinary(file);
+        statusDiv.textContent = '✅ Immagine caricata!';
+        statusDiv.style.color = '#4caf50';
+      } catch (error) {
+        document.getElementById('message').textContent = '❌ Errore nel caricamento: ' + error.message;
+        statusDiv.textContent = '';
+        return;
+      }
+    }
+
+    let items = loadItems();
+
+    if (editId) {
+      // ===== MODIFICA ARTICOLO ESISTENTE =====
+      const index = items.findIndex(i => i.id === parseInt(editId));
+      
+      if (index === -1) {
+        document.getElementById('message').textContent = '❌ Articolo non trovato!';
+        return;
+      }
+
+      // Aggiorna i campi
+      items[index].name = name;
+      items[index].description = description || '';
+      items[index].price = price || 0;
+      
+      // Se è stata caricata una nuova immagine, aggiornala
+      if (imageUrl) {
+        items[index].image = imageUrl;
+      }
+      // Altrimenti mantieni l'immagine esistente
+
+      document.getElementById('message').textContent = '✅ Articolo modificato!';
+      
+    } else {
+      // ===== AGGIUNGI NUOVO ARTICOLO =====
+      const newItem = {
+        id: items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1,
+        name,
+        description: description || '',
+        price: price || 0,
+        image: imageUrl
+      };
+      
+      items.push(newItem);
+      document.getElementById('message').textContent = '✅ Articolo aggiunto!';
+    }
+
+    saveItems(items);
+    renderList();
+    cancelEdit();
+    document.getElementById('addForm').reset();
+    document.getElementById('imagePreview').innerHTML = '';
+    statusDiv.textContent = '';
+  });
+
+  // ----- ANTEPRIMA IMMAGINE -----
+  document.getElementById('image').addEventListener('change', (e) => {
+    const preview = document.getElementById('imagePreview');
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        preview.innerHTML = `
+          <div>
+            <p style="font-size:12px;color:#666;margin-bottom:4px;">Nuova immagine:</p>
+            <img src="${ev.target.result}" style="max-width:100px; max-height:100px; border-radius:8px; border:1px solid #ddd; padding:4px;">
+            <p style="font-size:11px;color:#999;margin-top:4px;">Sostituirà l'immagine esistente</p>
+          </div>
+        `;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Se non c'è file, mostra l'immagine esistente (se in modifica)
+      const editId = document.getElementById('editId').value;
+      if (editId) {
+        const items = loadItems();
+        const item = items.find(i => i.id === parseInt(editId));
+        if (item && item.image) {
+          preview.innerHTML = `
+            <div>
+              <p style="font-size:12px;color:#666;margin-bottom:4px;">Immagine attuale:</p>
+              <img src="${escapeHtml(item.image)}" style="max-width:100px; max-height:100px; border-radius:8px; border:1px solid #ddd; padding:4px;">
+            </div>
+          `;
+        }
+      } else {
+        preview.innerHTML = '';
+      }
+    }
+  });
+
+  // ----- PULSANTE ANNULLA -----
+  document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
+
+  // ----- LOGOUT -----
+  document.getElementById('logoutLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem(SESSION_KEY);
+    window.location.href = 'index.html';
+  });
+
+  // ----- UTILITY -----
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ----- INIT -----
+  document.addEventListener('DOMContentLoaded', renderList);
+</script>
+</body>
+</html>
