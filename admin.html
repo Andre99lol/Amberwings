@@ -39,12 +39,9 @@
 </section>
 
 <section class="list-section">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
-    <h2>Articoli esistenti</h2>
-    <!-- NUOVO PULSANTE SCARICA JSON -->
-    <button id="downloadJsonBtn" style="background:#4CAF50; color:white; border:none; padding:10px 15px; border-radius:5px; cursor:pointer; font-weight:bold; margin-bottom:10px;">
-      📥 Scarica prodotti.json per GitHub
-    </button>
+  <h2>Articoli esistenti</h2>
+  <div id="syncStatus" style="font-size:0.85rem; color:#666; margin-bottom:10px; padding:8px; background:#f8f9fa; border-radius:6px;">
+    🔄 Sincronizzazione in corso...
   </div>
   <ul id="itemList"></ul>
 </section>
@@ -52,29 +49,86 @@
 <footer>&copy; 2025 - Gestione articoli</footer>
 
 <script>
-  // ----- CONFIGURAZIONE CLOUDINARY -----
+  // ============================================================
+  // CONFIGURAZIONE JSONBIN
+  // ============================================================
+  const JSONBIN_API_KEY = 'IL_TUO_API_KEY'; // ← DA JSONBIN
+  const JSONBIN_BIN_ID = 'IL_TUO_BIN_ID';   // ← DA JSONBIN
+  
+  // ============================================================
+  // CONFIGURAZIONE CLOUDINARY
+  // ============================================================
   const CLOUDINARY_CLOUD_NAME = 't6qrribf';
   const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
-  
-  const STORAGE_KEY = 'shopItems';
   const SESSION_KEY = 'loggedIn';
 
-  // ----- PROTEGGI PAGINA -----
+  // ============================================================
+  // PROTEGGI PAGINA
+  // ============================================================
   if (localStorage.getItem(SESSION_KEY) !== 'true') {
     window.location.href = 'login.html';
   }
 
-  // ----- FUNZIONI DATI -----
-  function loadItems() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+  // ============================================================
+  // FUNZIONI DATI (SALVA SU JSONBIN)
+  // ============================================================
+  async function loadItems() {
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+        headers: {
+          'X-Master-Key': JSONBIN_API_KEY
+        }
+      });
+      const data = await response.json();
+      return data.record || [];
+    } catch (error) {
+      console.error('Errore caricamento:', error);
+      setStatus('❌ Errore caricamento dati', 'error');
+      return [];
+    }
   }
 
-  function saveItems(items) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  async function saveItems(items) {
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_API_KEY
+        },
+        body: JSON.stringify(items)
+      });
+      if (!response.ok) throw new Error('Errore salvataggio');
+      setStatus(`✅ ${items.length} articoli salvati su cloud`, 'success');
+      return await response.json();
+    } catch (error) {
+      console.error('Errore salvataggio:', error);
+      setStatus('❌ Errore salvataggio', 'error');
+      throw error;
+    }
   }
 
-  // ----- CARICA IMMAGINE SU CLOUDINARY -----
+  // ============================================================
+  // STATUS
+  // ============================================================
+  function setStatus(msg, type) {
+    const el = document.getElementById('syncStatus');
+    el.textContent = msg;
+    if (type === 'success') {
+      el.style.background = '#e8f8f0';
+      el.style.color = '#27ae60';
+    } else if (type === 'error') {
+      el.style.background = '#fde8e8';
+      el.style.color = '#e74c3c';
+    } else {
+      el.style.background = '#f8f9fa';
+      el.style.color = '#666';
+    }
+  }
+
+  // ============================================================
+  // CARICA IMMAGINE SU CLOUDINARY
+  // ============================================================
   async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append('file', file);
@@ -83,28 +137,31 @@
     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Errore nel caricamento su Cloudinary');
-      }
-
+      const response = await fetch(url, { method: 'POST', body: formData });
+      if (!response.ok) throw new Error('Errore nel caricamento su Cloudinary');
       const data = await response.json();
       return data.secure_url;
     } catch (error) {
-      console.error('Errore upload Cloudinary:', error);
+      console.error('Errore upload:', error);
       throw error;
     }
   }
 
-  // ----- RENDER LISTA ADMIN (CON PULSANTI MODIFICA) -----
-  function renderList() {
-    const items = loadItems();
+  // ============================================================
+  // ESCAPE HTML
+  // ============================================================
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ============================================================
+  // RENDER LISTA ADMIN
+  // ============================================================
+  function renderList(items) {
     const list = document.getElementById('itemList');
-    if (items.length === 0) {
+    if (!items || items.length === 0) {
       list.innerHTML = '<li>Nessun articolo presente.</li>';
       return;
     }
@@ -113,17 +170,12 @@
         <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
         ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-left:10px;">` : ''}
         <div style="margin-top:5px;">
-          <button class="edit-btn" data-id="${item.id}" style="background:#2196F3;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">
-            ✏️ Modifica
-          </button>
-          <button class="delete-btn" data-id="${item.id}" style="background:#f44336;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">
-            🗑️ Rimuovi
-          </button>
+          <button class="edit-btn" data-id="${item.id}" style="background:#2196F3;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">✏️ Modifica</button>
+          <button class="delete-btn" data-id="${item.id}" style="background:#f44336;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;">🗑️ Rimuovi</button>
         </div>
       </li>
     `).join('');
 
-    // Eventi per i pulsanti Modifica
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         const id = parseInt(this.dataset.id);
@@ -131,7 +183,6 @@
       });
     });
 
-    // Eventi per i pulsanti Rimuovi
     document.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         const id = parseInt(this.dataset.id);
@@ -140,23 +191,37 @@
     });
   }
 
-  // ----- MODIFICA ARTICOLO (CARICA I DATI NEL FORM) -----
-  function editItem(id) {
-    const items = loadItems();
-    const item = items.find(i => i.id === id);
-    
-    if (!item) {
-      alert('Articolo non trovato!');
-      return;
+  // ============================================================
+  // CARICA DATI ALL'AVVIO
+  // ============================================================
+  async function loadData() {
+    setStatus('⏳ Caricamento in corso...', '');
+    try {
+      const items = await loadItems();
+      renderList(items);
+      setStatus(`✅ ${items.length} articoli caricati dal cloud`, 'success');
+    } catch (e) {
+      setStatus('❌ Errore caricamento', 'error');
+      renderList([]);
     }
+  }
 
-    // Popola il form con i dati esistenti
+  // ============================================================
+  // MODIFICA ARTICOLO
+  // ============================================================
+  let currentItems = [];
+
+  async function editItem(id) {
+    const items = await loadItems();
+    currentItems = items;
+    const item = items.find(i => i.id === id);
+    if (!item) { alert('Articolo non trovato!'); return; }
+
     document.getElementById('editId').value = item.id;
     document.getElementById('name').value = item.name;
     document.getElementById('description').value = item.description || '';
     document.getElementById('price').value = item.price;
     
-    // Mostra anteprima dell'immagine esistente
     const preview = document.getElementById('imagePreview');
     if (item.image) {
       preview.innerHTML = `
@@ -170,18 +235,17 @@
       preview.innerHTML = '';
     }
 
-    // Cambia il titolo e il pulsante
     document.getElementById('formTitle').textContent = '✏️ Modifica articolo';
     document.getElementById('submitBtn').textContent = '💾 Salva modifiche';
     document.getElementById('cancelBtn').style.display = 'inline-block';
     document.getElementById('message').textContent = '';
     document.getElementById('uploadStatus').textContent = '';
-
-    // Scrolla al form
     document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
   }
 
-  // ----- ANNULLA MODIFICA -----
+  // ============================================================
+  // ANNULLA MODIFICA
+  // ============================================================
   function cancelEdit() {
     document.getElementById('addForm').reset();
     document.getElementById('editId').value = '';
@@ -193,17 +257,21 @@
     document.getElementById('message').textContent = '';
   }
 
-  // ----- RIMUOVI ARTICOLO -----
-  function removeItem(id) {
+  // ============================================================
+  // RIMUOVI ARTICOLO
+  // ============================================================
+  async function removeItem(id) {
     if (!confirm('Rimuovere questo articolo?')) return;
-    let items = loadItems();
+    let items = await loadItems();
     items = items.filter(item => item.id !== id);
-    saveItems(items);
-    renderList();
+    await saveItems(items);
+    renderList(items);
     cancelEdit();
   }
 
-  // ----- AGGIUNGI/MODIFICA ARTICOLO -----
+  // ============================================================
+  // AGGIUNGI/MODIFICA ARTICOLO
+  // ============================================================
   document.getElementById('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -222,11 +290,9 @@
 
     let imageUrl = '';
 
-    // Se c'è un file, carica su Cloudinary
     if (file) {
       statusDiv.textContent = '⏳ Caricamento su Cloudinary...';
       statusDiv.style.color = '#ff9800';
-      
       try {
         imageUrl = await uploadToCloudinary(file);
         statusDiv.textContent = '✅ Immagine caricata!';
@@ -238,31 +304,20 @@
       }
     }
 
-    let items = loadItems();
+    let items = await loadItems();
 
     if (editId) {
-      // ===== MODIFICA ARTICOLO ESISTENTE =====
       const index = items.findIndex(i => i.id === parseInt(editId));
-      
       if (index === -1) {
         document.getElementById('message').textContent = '❌ Articolo non trovato!';
         return;
       }
-
-      // Aggiorna i campi
       items[index].name = name;
       items[index].description = description || '';
       items[index].price = price || 0;
-      
-      // Se è stata caricata una nuova immagine, aggiornala
-      if (imageUrl) {
-        items[index].image = imageUrl;
-      }
-
+      if (imageUrl) items[index].image = imageUrl;
       document.getElementById('message').textContent = '✅ Articolo modificato!';
-      
     } else {
-      // ===== AGGIUNGI NUOVO ARTICOLO =====
       const newItem = {
         id: items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1,
         name,
@@ -270,20 +325,21 @@
         price: price || 0,
         image: imageUrl
       };
-      
       items.push(newItem);
       document.getElementById('message').textContent = '✅ Articolo aggiunto!';
     }
 
-    saveItems(items);
-    renderList();
+    await saveItems(items);
+    renderList(items);
     cancelEdit();
     document.getElementById('addForm').reset();
     document.getElementById('imagePreview').innerHTML = '';
     statusDiv.textContent = '';
   });
 
-  // ----- ANTEPRIMA IMMAGINE -----
+  // ============================================================
+  // ANTEPRIMA IMMAGINE
+  // ============================================================
   document.getElementById('image').addEventListener('change', (e) => {
     const preview = document.getElementById('imagePreview');
     const file = e.target.files[0];
@@ -302,7 +358,7 @@
     } else {
       const editId = document.getElementById('editId').value;
       if (editId) {
-        const items = loadItems();
+        const items = currentItems;
         const item = items.find(i => i.id === parseInt(editId));
         if (item && item.image) {
           preview.innerHTML = `
@@ -318,65 +374,24 @@
     }
   });
 
-  // ----- PULSANTE DOWNLOAD JSON -----
-  document.getElementById('downloadJsonBtn').addEventListener('click', () => {
-    const items = loadItems();
-    if (items.length === 0) {
-      alert('Non ci sono articoli da scaricare.');
-      return;
-    }
-    
-    // Converte l'array di oggetti in stringa JSON formattata
-    const jsonStr = JSON.stringify(items, null, 2);
-    
-    // Crea un file scaricabile al volo
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'prodotti.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-
-  // ----- CARICA PRODOTTI INIZIALI DA prodotti.json SE LOCALSTORAGE È VUOTO -----
-  async function initItems() {
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      try {
-        const res = await fetch('prodotti.json');
-        if (res.ok) {
-          const data = await res.json();
-          saveItems(data);
-        }
-      } catch (err) {
-        console.log('Nessun file prodotti.json trovato o errore nel caricamento iniziale.');
-      }
-    }
-    renderList();
-  }
-
-  // ----- PULSANTE ANNULLA -----
+  // ============================================================
+  // PULSANTE ANNULLA
+  // ============================================================
   document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
 
-  // ----- LOGOUT -----
+  // ============================================================
+  // LOGOUT
+  // ============================================================
   document.getElementById('logoutLink').addEventListener('click', (e) => {
     e.preventDefault();
     localStorage.removeItem(SESSION_KEY);
     window.location.href = 'index.html';
   });
 
-  // ----- UTILITY -----
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  // ----- INIT -----
-  document.addEventListener('DOMContentLoaded', initItems);
+  // ============================================================
+  // INIT
+  // ============================================================
+  document.addEventListener('DOMContentLoaded', loadData);
 </script>
 </body>
 </html>
