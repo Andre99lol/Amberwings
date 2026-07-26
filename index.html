@@ -325,17 +325,32 @@
   }
 
   // ============================================================
-  // INVIO WHATSAPP - AGGIORNATO CON I COLORI
+  // FUNZIONE DI UTILITÀ: CONVERTE IMMAGINE (URL O BASE64) IN FILE
   // ============================================================
-  document.getElementById('sendWhatsAppBtn').addEventListener('click', () => {
+  async function urlToFile(imageSrc, filename = 'articolo.jpg') {
+    try {
+      const response = await fetch(imageSrc);
+      const blob = await response.blob();
+      const mimeType = blob.type || 'image/jpeg';
+      return new File([blob], filename, { type: mimeType });
+    } catch (e) {
+      console.error("Impossibile convertire l'immagine in file:", e);
+      return null;
+    }
+  }
+
+  // ============================================================
+  // INVIO WHATSAPP CON IMMAGINE (WEB SHARE API + FALLBACK)
+  // ============================================================
+  document.getElementById('sendWhatsAppBtn').addEventListener('click', async () => {
     const phone = '393470376110';
     const checkboxes = document.querySelectorAll('.item-checkbox:checked');
     
+    // Se non c'è nessun articolo selezionato, invia messaggio generico via link wa.me
     if (checkboxes.length === 0) {
-      const message = '> *Buondì, vorrei ricevere maggiori informazioni sui vostri articoli.*\n\nPotreste gentilmente fornirmi:\n- Disponibilità\n- Tempi di consegna\n- Costi di spedizione\nBuona giornata! ';
+      const message = '> *Buondì, vorrei ricevere maggiori informazioni sui vostri articoli.*\n\nPotreste gentilmente fornirmi:\n- Disponibilità\n- Tempi di consegna\n- Costi di spedizione\nBuona giornata!';
       const encodedMessage = encodeURIComponent(message);
-      const url = `https://wa.me/${phone}?text=${encodedMessage}`;
-      window.open(url, '_blank');
+      window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
       return;
     }
 
@@ -347,24 +362,58 @@
       if (item) selectedItems.push(item);
     });
 
-    let message = '> _*Chiedo gentilmente informazioni per questi articoli*_:\n\n';
-    
+    // Prepara il testo del messaggio (senza stampare il link grezzo dell'immagine)
+    let message = 'Chiedo gentilmente informazioni per questi articoli:\n\n';
+    selectedItems.forEach((item) => {
+      const colors = item.colors || [];
+      const colorText = colors.length > 0 ? ` (Colori: ${colors.join(', ')})` : '';
+      
+      message += `• ${item.name}${colorText}\n`;
+      if (item.price) message += `  Prezzo: € ${Number(item.price).toFixed(2)}\n`;
+      if (item.description) message += `  Note: ${item.description}\n`;
+      message += '\n';
+    });
+    message += 'Grazie!';
+
+    // Cerchiamo la prima immagine valida tra gli articoli selezionati
+    const itemWithImage = selectedItems.find(i => i.image && i.image.trim() !== '');
+    let imageFile = null;
+
+    if (itemWithImage) {
+      imageFile = await urlToFile(itemWithImage.image, `${itemWithImage.name.replace(/\s+/g, '_')}.jpg`);
+    }
+
+    // Prova ad usare la Web Share API se supportata dal dispositivo (smartphone) e se c'è un'immagine
+    if (imageFile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+      try {
+        await navigator.share({
+          title: 'Info Articoli',
+          text: message,
+          files: [imageFile]
+        });
+        return; // Condivisione nativa riuscita!
+      } catch (err) {
+        // Se l'utente annulla la condivisione non facciamo nulla
+        if (err.name === 'AbortError') return;
+        console.warn('Errore durante la condivisione nativa, provo con fallback wa.me', err);
+      }
+    }
+
+    // FALLBACK (Se siamo da PC Desktop o la Web Share API fallisce): usa il classico link WhatsApp
+    let fallbackMessage = '> _*Chiedo gentilmente informazioni per questi articoli*_:\n\n';
     selectedItems.forEach((item) => {
       const colors = item.colors || [];
       const colorText = colors.length > 0 ? ` ${colors.join(', ')}` : '';
-      
-      message += `• ${item.name}${colorText}\n`;
-      if (item.price) message += `• € ${Number(item.price).toFixed(2)}\n`;
-      if (item.description) message += `• ${item.description}\n`;
-      if (item.image) message += `• ${item.image}\n`;
-      message += '\n';
+      fallbackMessage += `• ${item.name}${colorText}\n`;
+      if (item.price) fallbackMessage += `• € ${Number(item.price).toFixed(2)}\n`;
+      if (item.description) fallbackMessage += `• ${item.description}\n`;
+      if (item.image) fallbackMessage += `• ${item.image}\n`;
+      fallbackMessage += '\n';
     });
-    
-    message += 'Grazie!';
+    fallbackMessage += 'Grazie!';
 
-    const encodedMessage = encodeURIComponent(message);
-    const url = `https://wa.me/${phone}?text=${encodedMessage}`;
-    window.open(url, '_blank');
+    const encodedMessage = encodeURIComponent(fallbackMessage);
+    window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
   });
 
   // ============================================================
