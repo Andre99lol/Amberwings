@@ -48,40 +48,27 @@
 
 <script>
   // ============================================================
-  // CONFIGURAZIONE - Caricata da config.json
+  // CONFIGURAZIONE - DIRETTAMENTE NEL CODICE (NO config.json)
   // ============================================================
-  let CONFIG = {};
-  const CLOUDINARY_CLOUD_NAME = 't6qrribf';
-  const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
-  const SESSION_KEY = 'loggedIn';
+  // ⬇️ INSERISCI I TUOI DATI QUI ⬇️
+  const CONFIG = {
+    GitHubToken: 'IL_TUO_GITHUB_TOKEN_QUI',   // ← IL TUO TOKEN
+    GitHubRepo: 'andre99lol/Amberwings',       // ← IL TUO REPO
+    GitHubPath: 'prodotti.json',               // ← IL TUO FILE DATI
+    GitHubBranch: 'main',
+    CloudinaryCloudName: 't6qrribf',
+    CloudinaryUploadPreset: 'Amberwings'
+  };
+  // ⬆️ FINE CONFIGURAZIONE ⬆️
 
-  // ============================================================
-  // CARICA CONFIGURAZIONE
-  // ============================================================
-  async function loadConfig() {
-    try {
-      const response = await fetch('config.json');
-      if (!response.ok) throw new Error('File config.json non trovato');
-      CONFIG = await response.json();
-      console.log('✅ Configurazione caricata');
-      console.log('📦 Repository:', CONFIG.GitHubRepo);
-      console.log('🔑 Token:', CONFIG.GitHubToken ? '✅ Caricato' : '❌ Non caricato');
-      return CONFIG;
-    } catch (error) {
-      console.error('❌ Errore caricamento config:', error);
-      alert('⚠️ Configurazione non trovata! Assicurati che config.json esista.');
-      return {};
-    }
-  }
+  const CLOUDINARY_CLOUD_NAME = CONFIG.CloudinaryCloudName;
+  const CLOUDINARY_UPLOAD_PRESET = CONFIG.CloudinaryUploadPreset;
+  const SESSION_KEY = 'loggedIn';
 
   // ============================================================
   // FUNZIONI DATI (SALVA SU GITHUB)
   // ============================================================
   async function loadItems() {
-    if (!CONFIG || !CONFIG.GitHubRepo) {
-      await loadConfig();
-    }
-    
     try {
       const url = `https://api.github.com/repos/${CONFIG.GitHubRepo}/contents/${CONFIG.GitHubPath}`;
       console.log('📥 Caricamento da GitHub...');
@@ -120,10 +107,6 @@
   }
 
   async function saveItems(items) {
-    if (!CONFIG || !CONFIG.GitHubRepo) {
-      await loadConfig();
-    }
-    
     try {
       const content = btoa(unescape(encodeURIComponent(JSON.stringify(items, null, 2))));
       
@@ -276,7 +259,6 @@
   async function loadData() {
     setStatus('⏳ Caricamento in corso...', '');
     try {
-      await loadConfig();
       const items = await loadItems();
       renderList(items);
       setStatus(`✅ ${items.length} articoli caricati da GitHub`, 'success');
@@ -349,7 +331,7 @@
   }
 
   // ============================================================
-  // AGGIUNGI/MODIFICA ARTICOLO (SENZA MATERIALI E COLORI)
+  // AGGIUNGI/MODIFICA ARTICOLO
   // ============================================================
   document.getElementById('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
