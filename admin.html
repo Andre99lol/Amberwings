@@ -51,8 +51,6 @@
   // CONFIGURAZIONE - Caricata da config.json
   // ============================================================
   let CONFIG = {};
-  let JSONBIN_API_KEY = '';
-  let JSONBIN_BIN_ID = '';
   const CLOUDINARY_CLOUD_NAME = 't6qrribf';
   const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
   const SESSION_KEY = 'loggedIn';
@@ -108,7 +106,6 @@
       const content = atob(data.content);
       const items = JSON.parse(content);
       
-      // Salva cache
       localStorage.setItem('shopItemsCache', JSON.stringify(items));
       localStorage.setItem('shopItemsSha', data.sha);
       
@@ -117,7 +114,6 @@
     } catch (error) {
       console.error('❌ Errore caricamento:', error);
       setStatus('❌ Errore caricamento dati', 'error');
-      // Usa cache se disponibile
       const cached = localStorage.getItem('shopItemsCache');
       return cached ? JSON.parse(cached) : [];
     }
@@ -195,17 +191,10 @@
   // ============================================================
   function setStatus(msg, type) {
     const el = document.getElementById('syncStatus');
+    if (!el) return;
     el.textContent = msg;
-    if (type === 'success') {
-      el.style.background = '#e8f8f0';
-      el.style.color = '#27ae60';
-    } else if (type === 'error') {
-      el.style.background = '#fde8e8';
-      el.style.color = '#e74c3c';
-    } else {
-      el.style.background = '#f8f9fa';
-      el.style.color = '#666';
-    }
+    el.style.background = type === 'success' ? '#e8f8f0' : type === 'error' ? '#fde8e8' : '#f8f9fa';
+    el.style.color = type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#666';
   }
 
   // ============================================================
@@ -240,56 +229,6 @@
   }
 
   // ============================================================
-  // GENERA CHECKBOX COLORI
-  // ============================================================
-  function generateColorCheckboxes(selectedMaterial, selectedColors = []) {
-    const container = document.getElementById('colorCheckboxes');
-    if (!container) return;
-    
-    if (!selectedMaterial || !MATERIALS[selectedMaterial]) {
-      container.innerHTML = `
-        <span style="color:#999;width:100%;text-align:center;padding:8px;">
-          Seleziona un materiale per vedere i colori
-        </span>
-      `;
-      return;
-    }
-    
-    const availableColors = MATERIALS[selectedMaterial].colors || [];
-    
-    container.innerHTML = availableColors.map(color => {
-      const isSelected = selectedColors.includes(color);
-      const dotColor = COLOR_DOTS[color] || '#ccc';
-      const isWhite = color === 'Bianco' || color === 'Marmo' || color === 'Bianco TPU';
-      return `
-        <label class="${isSelected ? 'selected' : ''}">
-          <input type="checkbox" class="color-checkbox" value="${color}" ${isSelected ? 'checked' : ''} />
-          <span class="color-dot" style="background:${dotColor};border-color:${isWhite ? '#ccc' : 'transparent'};"></span>
-          ${color}
-        </label>
-      `;
-    }).join('');
-    
-    // Aggiungi controllo max 2 colori
-    document.querySelectorAll('.color-checkbox').forEach(cb => {
-      cb.addEventListener('change', function() {
-        const checked = document.querySelectorAll('.color-checkbox:checked');
-        if (this.checked && checked.length > 2) {
-          alert('⚠️ Puoi selezionare massimo 2 colori.');
-          this.checked = false;
-          return;
-        }
-        const label = this.closest('label');
-        if (this.checked) {
-          label.classList.add('selected');
-        } else {
-          label.classList.remove('selected');
-        }
-      });
-    });
-  }
-
-  // ============================================================
   // RENDER LISTA ADMIN
   // ============================================================
   function renderList(items) {
@@ -305,20 +244,7 @@
       <li data-id="${item.id}">
         <div class="item-info">
           <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
-          <div style="font-size:0.85rem;color:#666;margin-top:2px;">
-            Materiale: ${item.material || 'Non specificato'}
-          </div>
-          ${item.colors && item.colors.length > 0 ? `
-            <div class="item-colors">
-              ${item.colors.map(color => `
-                <span>
-                  <span class="color-dot-small" style="background:${COLOR_DOTS[color] || '#ccc'};border-color:${color === 'Bianco' || color === 'Marmo' || color === 'Bianco TPU' ? '#ccc' : 'transparent'};"></span>
-                  ${color}
-                </span>
-              `).join('')}
-            </div>
-          ` : '<div style="font-size:0.8rem;color:#999;">Nessun colore</div>'}
-          ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-top:4px;">` : ''}
+          ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-top:4px;margin-left:10px;">` : ''}
         </div>
         <div class="item-actions">
           <button class="edit-btn" data-id="${item.id}" style="background:#2196F3;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">✏️ Modifica</button>
@@ -363,11 +289,8 @@
   // ============================================================
   // MODIFICA ARTICOLO
   // ============================================================
-  let currentItems = [];
-
   async function editItem(id) {
     const items = await loadItems();
-    currentItems = items;
     const item = items.find(i => i.id === id);
     if (!item) { alert('Articolo non trovato!'); return; }
 
@@ -375,23 +298,6 @@
     document.getElementById('name').value = item.name;
     document.getElementById('description').value = item.description || '';
     document.getElementById('price').value = item.price;
-    
-    const materialSelect = document.getElementById('material');
-    if (item.material) {
-      materialSelect.value = item.material;
-    } else {
-      materialSelect.value = '';
-    }
-    
-    if (item.material) {
-      generateColorCheckboxes(item.material, item.colors || []);
-    } else {
-      document.getElementById('colorCheckboxes').innerHTML = `
-        <span style="color:#999;width:100%;text-align:center;padding:8px;">
-          Seleziona un materiale per vedere i colori
-        </span>
-      `;
-    }
     
     const preview = document.getElementById('imagePreview');
     if (item.image) {
@@ -423,17 +329,11 @@
     document.getElementById('editId').value = '';
     document.getElementById('imagePreview').innerHTML = '';
     document.getElementById('uploadStatus').textContent = '';
-    document.getElementById('colorCheckboxes').innerHTML = `
-      <span style="color:#999;width:100%;text-align:center;padding:8px;">
-        Seleziona un materiale per vedere i colori
-      </span>
-    `;
     document.getElementById('formTitle').textContent = '➕ Aggiungi nuovo articolo';
     document.getElementById('submitBtn').textContent = '➕ Aggiungi';
     document.getElementById('cancelBtn').style.display = 'none';
     document.getElementById('message').textContent = '';
     document.getElementById('message').className = '';
-    document.getElementById('material').value = '';
   }
 
   // ============================================================
@@ -449,26 +349,7 @@
   }
 
   // ============================================================
-  // GESTIONE CAMBIO MATERIALE
-  // ============================================================
-  document.getElementById('material').addEventListener('change', function() {
-    const selectedMaterial = this.value;
-    const editId = document.getElementById('editId').value;
-    let selectedColors = [];
-    
-    if (editId) {
-      loadItems().then(items => {
-        const item = items.find(i => i.id === parseInt(editId));
-        if (item) selectedColors = item.colors || [];
-        generateColorCheckboxes(selectedMaterial, selectedColors);
-      });
-    } else {
-      generateColorCheckboxes(selectedMaterial, []);
-    }
-  });
-
-  // ============================================================
-  // AGGIUNGI/MODIFICA ARTICOLO
+  // AGGIUNGI/MODIFICA ARTICOLO (SENZA MATERIALI E COLORI)
   // ============================================================
   document.getElementById('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -477,29 +358,13 @@
     const name = document.getElementById('name').value.trim();
     const description = document.getElementById('description').value.trim();
     const price = parseFloat(document.getElementById('price').value) || 0;
-    const material = document.getElementById('material').value;
     const fileInput = document.getElementById('image');
     const file = fileInput.files[0];
     const statusDiv = document.getElementById('uploadStatus');
     const messageDiv = document.getElementById('message');
 
-    const selectedColors = Array.from(document.querySelectorAll('.color-checkbox:checked'))
-      .map(cb => cb.value);
-
     if (!name) {
       messageDiv.textContent = '❌ Nome obbligatorio.';
-      messageDiv.className = 'error';
-      return;
-    }
-
-    if (!material) {
-      messageDiv.textContent = '❌ Seleziona un materiale.';
-      messageDiv.className = 'error';
-      return;
-    }
-
-    if (selectedColors.length === 0) {
-      messageDiv.textContent = '❌ Seleziona almeno un colore.';
       messageDiv.className = 'error';
       return;
     }
@@ -533,8 +398,6 @@
       items[index].name = name;
       items[index].description = description || '';
       items[index].price = price;
-      items[index].material = material;
-      items[index].colors = selectedColors;
       if (imageUrl) items[index].image = imageUrl;
       messageDiv.textContent = '✅ Articolo modificato!';
       messageDiv.className = 'success';
@@ -545,8 +408,6 @@
         name,
         description: description || '',
         price: price,
-        material: material,
-        colors: selectedColors,
         image: imageUrl,
         createdAt: new Date().toISOString()
       };
@@ -560,11 +421,6 @@
     cancelEdit();
     document.getElementById('addForm').reset();
     document.getElementById('imagePreview').innerHTML = '';
-    document.getElementById('colorCheckboxes').innerHTML = `
-      <span style="color:#999;width:100%;text-align:center;padding:8px;">
-        Seleziona un materiale per vedere i colori
-      </span>
-    `;
     statusDiv.textContent = '';
     
     localStorage.setItem('shopItemsUpdated', Date.now().toString());
