@@ -25,30 +25,6 @@
     <input type="text" id="description" placeholder="Descrizione" />
     <input type="number" id="price" placeholder="Prezzo" step="0.01" />
     
-    <!-- Materiale -->
-    <div>
-      <label style="font-weight:600;display:block;margin-bottom:4px;">
-        Materiale <span class="required-label">*</span>
-      </label>
-      <select id="material" required>
-        <option value="">-- Scegli materiale --</option>
-        <option value="PLA+">PLA+</option>
-        <option value="TPU">TPU</option>
-      </select>
-    </div>
-    
-    <!-- Colori -->
-    <div>
-      <label style="font-weight:600;display:block;margin-bottom:4px;">
-        Colori disponibili <span class="required-label">*</span> <small>(max 2)</small>
-      </label>
-      <div id="colorCheckboxes" class="color-checkboxes-group">
-        <span style="color:#999;width:100%;text-align:center;padding:8px;">
-          Seleziona un materiale per vedere i colori
-        </span>
-      </div>
-    </div>
-    
     <input type="file" id="image" accept="image/*" />
     <small style="display:block; margin-bottom:12px; color:#888;">
       Carica un'immagine (lascia vuoto per mantenere quella esistente)
@@ -74,8 +50,8 @@
   // ============================================================
   // CONFIGURAZIONE JSONBIN
   // ============================================================
-  const JSONBIN_API_KEY = 'IL_TUO_API_KEY'; // ← INSERISCI IL TUO API KEY
-  const JSONBIN_BIN_ID = 'IL_TUO_BIN_ID';   // ← INSERISCI IL TUO BIN ID
+  const JSONBIN_API_KEY = config.Api; // ← INSERISCI IL TUO API KEY
+  const JSONBIN_BIN_ID = config.BinID;   // ← INSERISCI IL TUO BIN ID
   
   // ============================================================
   // CONFIGURAZIONE CLOUDINARY
@@ -83,40 +59,6 @@
   const CLOUDINARY_CLOUD_NAME = 't6qrribf';
   const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
   const SESSION_KEY = 'loggedIn';
-
-  // ============================================================
-  // DEFINIZIONE MATERIALI E COLORI (uguale a index.html)
-  // ============================================================
-  const MATERIALS = {
-    'PLA+': {
-      colors: ['Bianco', 'Marmo', 'Beige', 'Giallo', 'Arancione', 'Rosa', 'Rosso', 'Viola', 'Verde Acqua', 'Verde', 'Azzurro', 'Blu', 'Grigio', 'Marrone', 'Nero', 'Oro', 'Argento', 'Bronzo']
-    },
-    'TPU': {
-      colors: ['Bianco TPU']
-    }
-  };
-
-  const COLOR_DOTS = {
-    'Bianco': '#ffffff',
-    'Marmo': '#E7E9EA',
-    'Beige': '#F5F5DC',
-    'Giallo': '#f1c40f',
-    'Arancione': '#e67e22',
-    'Rosa': '#fd79a8',
-    'Rosso': '#e74c3c',
-    'Viola': '#9b59b6',
-    'Verde Acqua': '#1abc9c',
-    'Verde': '#27ae60',
-    'Azzurro': '#3498db',
-    'Blu': '#2980b9',
-    'Grigio': '#95a5a6',
-    'Marrone': '#8B4513',
-    'Nero': '#000000',
-    'Oro': '#FFD700',
-    'Argento': '#C0C0C0',
-    'Bronzo': '#CD7F32',
-    'Bianco TPU': '#FFFFFF'
-  };
 
   // ============================================================
   // PROTEGGI PAGINA
