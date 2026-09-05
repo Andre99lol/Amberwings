@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AmberWings - Vetrina</title>
+  <title>Vetrina</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   
@@ -30,32 +30,52 @@
     // Inizializza Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    
-    // Per debug - mostra se Firebase è inizializzato
     console.log('✅ Firebase inizializzato');
   </script>
 </head>
 <body>
 
 <header>
-  <h1>🦋 AmberWings</h1>
+  <h1>
+    <img src="icona.jpeg" alt="Icona" class="header-icon" />
+    I nostri articoli
+  </h1>
   <nav>
-    <a href="admin.html" id="adminLink">🔐 Area Privata</a>
+    <a href="login.html">Area Privata</a>
   </nav>
 </header>
 
-<section class="hero">
-  <h2>✨ I nostri prodotti</h2>
-  <p>Scopri la collezione AmberWings</p>
-</section>
+<!-- Sezione contatti -->
+<div class="section">
+  <div class="controls">
+    <a href="https://www.paypal.me/teamamberwings/" target="_blank" class="paypal-btn" id="PaypalBtn">
+      <i class="fab fa-paypal" style="margin-right:8px;"></i>
+      Paga con Paypal
+    </a>
 
-<section class="products">
-  <div id="productList" class="product-grid">
-    <div class="loading">⏳ Caricamento prodotti...</div>
+    <a href="https://www.facebook.com/people/Amber-Wings/61576399365300/" target="_blank" class="facebook-btn" id="FacebookBtn">
+      <i class="fab fa-facebook" style="margin-right:8px;"></i>
+      Seguici su Facebook
+    </a>
+
+    <a href="https://www.instagram.com/amberwings3d/" target="_blank" class="instagram-btn" id="InstagramBtn">
+      <i class="fab fa-instagram" style="margin-right:8px;"></i>
+      Seguici su Instagram
+    </a>
+    
+    <button id="sendWhatsAppBtn">
+      <i class="fab fa-whatsapp" style="margin-right:8px;"></i>
+      Contattaci su WhatsApp
+    </button>
+    
+    <span id="selectedCount">0 articoli selezionati</span>
   </div>
-</section>
+</div>
 
-<footer>&copy; 2025 AmberWings - Tutti i diritti riservati</footer>
+<!-- Griglia delle card -->
+<div class="grid" id="vetrinaGrid"></div>
+
+<footer>&copy; Barons & Coec</footer>
 
 <script>
   // ============================================================
@@ -63,107 +83,80 @@
   // ============================================================
   const COLLECTION_NAME = 'prodotti';
   const SESSION_KEY = 'loggedIn';
+  const STORAGE_KEY = 'shopItems';
 
   // ============================================================
-  // CARICA PRODOTTI DA FIREBASE
+  // DEFINIZIONE MATERIALI E COLORI (TUTTO ORIGINALE)
   // ============================================================
-  async function loadProducts() {
-    const productList = document.getElementById('productList');
-    
+  const MATERIALS = {
+    'PLA+': {
+      colors: ['Bianco', 'Marmo', 'Beige', 'Giallo', 'Arancione', 'Rosa', 'Rosso', 'Viola', 'Verde Acqua', 'Verde', 'Azzurro', 'Blu', 'Grigio', 'Marrone', 'Nero', 'Oro', 'Argento', 'Bronzo']
+    },
+    'TPU': {
+      colors: ['Bianco TPU']
+    }
+  };
+
+  const COLOR_DOTS = {
+    'Bianco': '#ffffff',
+    'Marmo': '#E7E9EA',
+    'Beige': '#F5F5DC',
+    'Giallo': '#f1c40f',
+    'Arancione': '#e67e22',
+    'Rosa': '#fd79a8',
+    'Rosso': '#e74c3c',
+    'Viola': '#9b59b6',
+    'Verde Acqua': '#1abc9c',
+    'Verde': '#27ae60',
+    'Azzurro': '#3498db',
+    'Blu': '#2980b9',
+    'Grigio': '#95a5a6',
+    'Marrone': '#8B4513',
+    'Nero': '#000000',
+    'Oro': '#FFD700',
+    'Argento': '#C0C0C0',
+    'Bronzo': '#CD7F32',
+    'Bianco TPU': '#FFFFFF'
+  };
+
+  // ============================================================
+  // CARICAMENTO ARTICOLI DA FIREBASE (INVECE DI JSONBIN)
+  // ============================================================
+  async function loadItems() {
     try {
-      console.log('📥 Caricamento prodotti da Firebase...');
+      console.log('📥 Caricamento da Firebase...');
       
-      // Carica i dati da Firebase
-      const snapshot = await db.collection(COLLECTION_NAME).get();
-      
-      console.log('📦 Documenti trovati:', snapshot.size);
-      
-      if (snapshot.empty) {
-        console.log('⚠️ Nessun documento trovato');
-        productList.innerHTML = `
-          <div class="no-products">
-            <p>📦 Nessun prodotto disponibile al momento.</p>
-            <p style="font-size:14px;color:#999;margin-top:10px;">
-              Vai all'<a href="admin.html" style="color:#667eea;">Area Privata</a> per aggiungere prodotti.
-            </p>
-          </div>
-        `;
-        return;
-      }
-      
-      const products = [];
+      const snapshot = await db.collection(COLLECTION_NAME).orderBy('createdAt', 'desc').get();
+      const items = [];
       snapshot.forEach(doc => {
         const data = doc.data();
-        console.log(`📄 Documento ${doc.id}:`, data);
-        products.push({
+        items.push({
           ...data,
           firebaseId: doc.id
         });
       });
       
-      console.log(`✅ Caricati ${products.length} prodotti`);
+      console.log(`✅ Caricati ${items.length} prodotti da Firebase`);
       
-      // Mostra i prodotti
-      if (products.length === 0) {
-        productList.innerHTML = `
-          <div class="no-products">
-            <p>📦 Nessun prodotto disponibile al momento.</p>
-          </div>
-        `;
-        return;
-      }
+      // Salva in cache locale
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       
-      productList.innerHTML = products.map(product => `
-        <div class="product-card">
-          ${product.image ? `<img src="${product.image}" alt="${product.name}" class="product-image" onerror="this.style.display='none'" />` : ''}
-          <div class="product-info">
-            <h3>${escapeHtml(product.name)}</h3>
-            ${product.description ? `<p class="product-description">${escapeHtml(product.description)}</p>` : ''}
-            <p class="product-price">€ ${Number(product.price).toFixed(2)}</p>
-          </div>
-        </div>
-      `).join('');
-      
-      // Salva in cache per eventuale uso offline
-      localStorage.setItem('shopItemsCache', JSON.stringify(products));
-      
+      return items;
     } catch (error) {
-      console.error('❌ Errore caricamento prodotti:', error);
-      console.error('Dettaglio errore:', error.message);
+      console.error('❌ Errore caricamento:', error);
       
       // Prova a caricare dalla cache
-      const cached = localStorage.getItem('shopItemsCache');
+      const cached = localStorage.getItem(STORAGE_KEY);
       if (cached) {
         console.log('📦 Usando dati in cache');
         try {
-          const products = JSON.parse(cached);
-          productList.innerHTML = products.map(product => `
-            <div class="product-card">
-              ${product.image ? `<img src="${product.image}" alt="${product.name}" class="product-image" onerror="this.style.display='none'" />` : ''}
-              <div class="product-info">
-                <h3>${escapeHtml(product.name)}</h3>
-                ${product.description ? `<p class="product-description">${escapeHtml(product.description)}</p>` : ''}
-                <p class="product-price">€ ${Number(product.price).toFixed(2)}</p>
-              </div>
-            </div>
-          `).join('');
-          return;
+          return JSON.parse(cached);
         } catch (e) {
-          console.error('❌ Errore nel parsing della cache:', e);
+          console.error('❌ Errore parsing cache:', e);
+          return [];
         }
       }
-      
-      productList.innerHTML = `
-        <div class="error">
-          <p>❌ Impossibile caricare i prodotti.</p>
-          <p style="font-size:14px;color:#999;margin-top:10px;">
-            Errore: ${error.message}
-          </p>
-          <p style="font-size:14px;color:#999;margin-top:10px;">
-            Verifica che le <strong>regole di Firebase</strong> siano configurate correttamente.
-          </p>
-        </div>
-      `;
+      return [];
     }
   }
 
@@ -178,25 +171,232 @@
   }
 
   // ============================================================
-  // MOSTRA/NASCONDI LINK ADMIN
+  // TOGGLE LISTA COLORI
   // ============================================================
-  function checkAdminAccess() {
-    const adminLink = document.getElementById('adminLink');
-    if (localStorage.getItem(SESSION_KEY) === 'true') {
-      adminLink.style.display = 'inline-block';
-    } else {
-      adminLink.style.display = 'none';
+  function toggleColors(itemId) {
+    const list = document.querySelector(`.color-list[data-id="${itemId}"]`);
+    const toggleBtn = document.querySelector(`.color-toggle[data-id="${itemId}"]`);
+    
+    if (list) {
+      list.classList.toggle('open');
+      
+      if (toggleBtn) {
+        toggleBtn.classList.toggle('open');
+        const isOpen = list.classList.contains('open');
+        toggleBtn.innerHTML = isOpen ? 
+          '🎨 Nascondi colori <i class="fas fa-chevron-up"></i>' : 
+          '🎨 Scegli colori <i class="fas fa-chevron-down"></i>';
+      }
     }
   }
 
   // ============================================================
-  // INIT
+  // TOGGLE SELEZIONE CARD
   // ============================================================
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Pagina caricata, avvio loadProducts()...');
-    loadProducts();
-    checkAdminAccess();
+  function toggleCardSelection(itemId) {
+    const card = document.querySelector(`.card[data-id="${itemId}"]`);
+    const checkbox = document.querySelector(`#check-${itemId}`);
+    
+    if (card && checkbox) {
+      checkbox.checked = !checkbox.checked;
+      
+      if (checkbox.checked) {
+        card.classList.add('selected');
+      } else {
+        card.classList.remove('selected');
+      }
+      
+      updateSelectedCount();
+    }
+  }
+
+  // ============================================================
+  // RENDER VETRINA
+  // ============================================================
+  async function render() {
+    const items = await loadItems();
+    const grid = document.getElementById('vetrinaGrid');
+
+    if (items.length === 0) {
+      grid.innerHTML = '<p style="text-align:center;padding:40px;color:#666;">Nessun articolo disponibile.</p>';
+      return;
+    }
+
+    grid.innerHTML = items.map((item, index) => {
+      const isChecked = document.querySelector(`#check-${item.id}`)?.checked || false;
+      const selectedMaterial = item.material || '';
+      const availableColors = selectedMaterial ? MATERIALS[selectedMaterial]?.colors || [] : [];
+      const selectedColors = item.colors || [];
+      
+      return `
+      <div class="card ${isChecked ? 'selected' : ''}" data-id="${item.id}" onclick="toggleCardSelection(${item.id})">
+        <input type="checkbox" id="check-${item.id}" class="item-checkbox" data-id="${item.id}" ${isChecked ? 'checked' : ''} style="display:none;" />
+        <h2>${escapeHtml(item.name)}</h2>
+        <p>${escapeHtml(item.description || '')}</p>
+        ${Number(item.price) > 0 ? `<p class="price">€ ${Number(item.price).toFixed(2)}</p>` : ''}
+        
+        <!-- Selezione Materiale (sola lettura) -->
+        <div style="margin-top:8px;font-size:0.9rem;color:#2c3e50;">
+          <strong>Materiale:</strong> ${selectedMaterial || 'Non specificato'}
+        </div>
+        
+        <!-- Colori selezionati -->
+        ${selectedColors.length > 0 ? `
+          <div style="margin-top:4px;font-size:0.85rem;color:#2c3e50;">
+            <strong>Colori:</strong>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
+              ${selectedColors.map(color => `
+                <span style="display:inline-flex;align-items:center;gap:4px;background:#f0f0f0;padding:2px 8px;border-radius:12px;font-size:0.75rem;">
+                  <span class="color-dot" style="width:10px;height:10px;background:${COLOR_DOTS[color] || '#ccc'};border:1px solid ${color === 'Bianco' || color === 'Marmo' || color === 'Bianco TPU' ? '#ccc' : 'transparent'};"></span>
+                  ${color}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        ` : `<div style="margin-top:4px;font-size:0.85rem;color:#999;">Nessun colore selezionato</div>`}
+        
+        ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}">` : ''}
+      </div>
+    `}).join('');
+
+    // ----- EVENTI CHECKBOX SELEZIONE ARTICOLO -----
+    document.querySelectorAll('.item-checkbox').forEach(cb => {
+      cb.addEventListener('change', function(e) {
+        e.stopPropagation();
+        const card = this.closest('.card');
+        if (this.checked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+        updateSelectedCount();
+      });
+    });
+
+    updateSelectedCount();
+  }
+
+  // ============================================================
+  // CONTATORE ARTICOLI SELEZIONATI
+  // ============================================================
+  function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+    const countEl = document.getElementById('selectedCount');
+    if (countEl) {
+      countEl.textContent = `${checkboxes.length} articoli selezionati`;
+    }
+  }
+
+  // ============================================================
+  // FUNZIONE DI UTILITÀ: CONVERTE IMMAGINE (URL O BASE64) IN FILE
+  // ============================================================
+  async function urlToFile(imageSrc, filename = 'articolo.jpg') {
+    try {
+      const response = await fetch(imageSrc);
+      const blob = await response.blob();
+      const mimeType = blob.type || 'image/jpeg';
+      return new File([blob], filename, { type: mimeType });
+    } catch (e) {
+      console.error("Impossibile convertire l'immagine in file:", e);
+      return null;
+    }
+  }
+
+  // ============================================================
+  // INVIO WHATSAPP CON IMMAGINE (WEB SHARE API + FALLBACK)
+  // ============================================================
+  document.getElementById('sendWhatsAppBtn').addEventListener('click', async () => {
+    const phone = '393470376110';
+    const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+    const items = await loadItems();
+    
+    // Se non c'è nessun articolo selezionato, invia messaggio generico via link wa.me
+    if (checkboxes.length === 0) {
+      const message = '> *Buondì, vorrei ricevere maggiori informazioni sui vostri articoli.*\n\nPotreste gentilmente fornirmi:\n- Disponibilità\n- Tempi di consegna\n- Costi di spedizione\nBuona giornata!';
+      const encodedMessage = encodeURIComponent(message);
+      window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
+      return;
+    }
+
+    const selectedItems = [];
+    checkboxes.forEach(cb => {
+      const id = parseInt(cb.dataset.id);
+      const item = items.find(i => i.id === id);
+      if (item) selectedItems.push(item);
+    });
+
+    // Prepara il testo del messaggio
+    let message = 'Chiedo gentilmente informazioni per questi articoli:\n\n';
+    selectedItems.forEach((item) => {
+      const material = item.material || 'Materiale non specificato';
+      const colors = item.colors || [];
+      const colorText = colors.length > 0 ? ` (Colori: ${colors.join(', ')})` : '';
+      
+      message += `• ${item.name} - Materiale: ${material}${colorText}\n`;
+      if (item.price) message += `  Prezzo: € ${Number(item.price).toFixed(2)}\n`;
+      if (item.description) message += `  Note: ${item.description}\n`;
+      message += '\n';
+    });
+    message += 'Grazie!';
+
+    // Cerchiamo la prima immagine valida tra gli articoli selezionati
+    const itemWithImage = selectedItems.find(i => i.image && i.image.trim() !== '');
+    let imageFile = null;
+
+    if (itemWithImage) {
+      imageFile = await urlToFile(itemWithImage.image, `${itemWithImage.name.replace(/\s+/g, '_')}.jpg`);
+    }
+
+    // Prova ad usare la Web Share API se supportata dal dispositivo
+    if (imageFile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+      try {
+        await navigator.share({
+          title: 'Info Articoli',
+          text: message,
+          files: [imageFile]
+        });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Errore durante la condivisione nativa, provo con fallback wa.me', err);
+      }
+    }
+
+    // FALLBACK: usa il classico link WhatsApp
+    let fallbackMessage = '> _*Chiedo gentilmente informazioni per questi articoli*_:\n\n';
+    selectedItems.forEach((item) => {
+      const material = item.material || 'Materiale non specificato';
+      const colors = item.colors || [];
+      const colorText = colors.length > 0 ? ` (Colori: ${colors.join(', ')})` : '';
+      
+      fallbackMessage += `• ${item.name} - Materiale: ${material}${colorText}\n`;
+      if (item.price) fallbackMessage += `  💰 € ${Number(item.price).toFixed(2)}\n`;
+      if (item.description) fallbackMessage += `  📝 ${item.description}\n`;
+      if (item.image) fallbackMessage += `  🖼️ ${item.image}\n`;
+      fallbackMessage += '\n';
+    });
+    fallbackMessage += 'Grazie!';
+
+    const encodedMessage = encodeURIComponent(fallbackMessage);
+    window.open(`https://wa.me/${phone}?text=${encodedMessage}`, '_blank');
   });
+
+  // ============================================================
+  // INIZIALIZZA - Ascolta aggiornamenti dall'admin
+  // ============================================================
+  document.addEventListener('DOMContentLoaded', render);
+
+  // Ascolta aggiornamenti dal localStorage (quando l'admin salva)
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'shopItemsUpdated' || e.key === STORAGE_KEY) {
+      render();
+    }
+  });
+
+  // Ricarica ogni 30 secondi per sincronizzare
+  setInterval(() => {
+    render();
+  }, 30000);
 </script>
 </body>
 </html>
