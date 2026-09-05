@@ -119,7 +119,7 @@
   };
 
   // ============================================================
-  // CARICAMENTO ARTICOLI DA FIREBASE
+  // CARICAMENTO ARTICOLI DA FIREBASE (VERSIONE FIXATA)
   // ============================================================
   async function loadItems() {
     try {
@@ -129,13 +129,16 @@
       const items = [];
       snapshot.forEach(doc => {
         const data = doc.data();
+        // 🔧 FORZA ID = Firebase ID per uniformità
         items.push({
           ...data,
-          firebaseId: doc.id
+          firebaseId: doc.id,
+          id: doc.id  // ID uguale al Firebase ID
         });
       });
       
       console.log(`✅ Caricati ${items.length} prodotti da Firebase`);
+      console.log('🔍 Primo item:', items[0]); // DEBUG
       
       // Salva in cache locale
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -149,7 +152,13 @@
       if (cached) {
         console.log('📦 Usando dati in cache');
         try {
-          return JSON.parse(cached);
+          const cachedItems = JSON.parse(cached);
+          // 🔧 Assicura che ogni item abbia id = firebaseId
+          const fixedItems = cachedItems.map(item => ({
+            ...item,
+            id: item.firebaseId || item.id
+          }));
+          return fixedItems;
         } catch (e) {
           console.error('❌ Errore parsing cache:', e);
           return [];
@@ -170,29 +179,45 @@
   }
 
   // ============================================================
-  // TOGGLE SELEZIONE CARD (MULTIPLA)
+  // TOGGLE SELEZIONE CARD (MULTIPLA - VERSIONE FIXATA)
   // ============================================================
   function toggleCardSelection(itemId, event) {
-    if (event) event.stopPropagation();
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    
+    console.log(`🔄 Toggle selezione per ID: ${itemId}`); // DEBUG
     
     const card = document.querySelector(`.card[data-id="${itemId}"]`);
     const checkbox = document.querySelector(`#check-${itemId}`);
     
-    if (card && checkbox) {
-      checkbox.checked = !checkbox.checked;
-      
-      if (checkbox.checked) {
-        card.classList.add('selected');
-      } else {
-        card.classList.remove('selected');
-      }
-      
-      updateSelectedCount();
+    if (!card) {
+      console.warn(`⚠️ Card non trovata per ID: ${itemId}`);
+      return;
     }
+    
+    if (!checkbox) {
+      console.warn(`⚠️ Checkbox non trovato per ID: ${itemId}`);
+      return;
+    }
+    
+    // Inverte lo stato
+    checkbox.checked = !checkbox.checked;
+    
+    if (checkbox.checked) {
+      card.classList.add('selected');
+      console.log(`✅ Selezionato: ${itemId}`);
+    } else {
+      card.classList.remove('selected');
+      console.log(`❌ Deselezionato: ${itemId}`);
+    }
+    
+    updateSelectedCount();
   }
 
   // ============================================================
-  // RENDER VETRINA
+  // RENDER VETRINA (VERSIONE FIXATA)
   // ============================================================
   async function render() {
     const items = await loadItems();
@@ -203,14 +228,19 @@
       return;
     }
 
-    grid.innerHTML = items.map((item, index) => {
-      const isChecked = document.querySelector(`#check-${item.id}`)?.checked || false;
+    // 🔍 DEBUG - Mostra gli ID disponibili
+    console.log('📋 ID disponibili:', items.map(i => i.id));
+
+    grid.innerHTML = items.map((item) => {
+      // Usa item.id (che ora è il Firebase ID)
+      const itemId = item.id;
+      const isChecked = document.querySelector(`#check-${itemId}`)?.checked || false;
       const selectedMaterial = item.material || '';
       const selectedColors = item.colors || [];
       
       return `
-      <div class="card ${isChecked ? 'selected' : ''}" data-id="${item.id}" onclick="toggleCardSelection(${item.id}, event)">
-        <input type="checkbox" id="check-${item.id}" class="item-checkbox" data-id="${item.id}" ${isChecked ? 'checked' : ''} style="display:none;" />
+      <div class="card ${isChecked ? 'selected' : ''}" data-id="${itemId}" onclick="toggleCardSelection('${itemId}', event)">
+        <input type="checkbox" id="check-${itemId}" class="item-checkbox" data-id="${itemId}" ${isChecked ? 'checked' : ''} style="display:none;" />
         <h2>${escapeHtml(item.name)}</h2>
         <p>${escapeHtml(item.description || '')}</p>
         ${Number(item.price) > 0 ? `<p class="price">€ ${Number(item.price).toFixed(2)}</p>` : ''}
@@ -265,6 +295,7 @@
     if (countEl) {
       countEl.textContent = `${checkboxes.length} articoli selezionati`;
     }
+    console.log(`📊 Totale selezionati: ${checkboxes.length}`); // DEBUG
   }
 
   // ============================================================
@@ -301,13 +332,23 @@
     // Raccogli tutti gli articoli selezionati
     const selectedItems = [];
     checkboxes.forEach(cb => {
-      const id = parseInt(cb.dataset.id);
+      const id = cb.dataset.id;
       const item = items.find(i => i.id === id);
-      if (item) selectedItems.push(item);
+      if (item) {
+        selectedItems.push(item);
+        console.log(`✅ Trovato articolo: ${item.name} (ID: ${id})`);
+      } else {
+        console.warn(`⚠️ Articolo non trovato per ID: ${id}`);
+      }
     });
 
+    if (selectedItems.length === 0) {
+      alert('Nessun articolo valido selezionato!');
+      return;
+    }
+
     // ============================================================
-    // 🔧 MODIFICA IL TESTO DEL MESSAGGIO QUI SOTTO
+    // TESTO DEL MESSAGGIO
     // ============================================================
     let message = '🦋 *Richiesta informazioni AmberWings* 🦋\n\n';
     message += 'Salve, vorrei ricevere informazioni sui seguenti articoli:\n\n';
@@ -356,17 +397,22 @@
   // ============================================================
   // INIZIALIZZA
   // ============================================================
-  document.addEventListener('DOMContentLoaded', render);
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Avvio render...');
+    render();
+  });
 
   // Ascolta aggiornamenti dal localStorage
   window.addEventListener('storage', (e) => {
     if (e.key === 'shopItemsUpdated' || e.key === STORAGE_KEY) {
+      console.log('🔄 Aggiornamento rilevato, ricarico...');
       render();
     }
   });
 
   // Ricarica ogni 30 secondi
   setInterval(() => {
+    console.log('⏰ Refresh automatico...');
     render();
   }, 30000);
 </script>
