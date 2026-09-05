@@ -8,15 +8,12 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   
   <!-- ============================================================
-       FIREBASE - SDK (versione compat per tag script)
+       FIREBASE - SDK
        ============================================================ -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   
   <script>
-    // ============================================================
-    // CONFIGURAZIONE FIREBASE (DA CONSOLE FIREBASE)
-    // ============================================================
     const firebaseConfig = {
       apiKey: "AIzaSyAsMApyZ7qFSsc0tc8mjwjjk1lFI0F-IlE",
       authDomain: "amberwings.firebaseapp.com",
@@ -27,7 +24,6 @@
       measurementId: "G-8G4N0VMDJR"
     };
 
-    // Inizializza Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     console.log('✅ Firebase inizializzato');
@@ -51,27 +47,6 @@
     <input type="text" id="description" placeholder="Descrizione" />
     <input type="number" id="price" placeholder="Prezzo" step="0.01" />
     
-    <!-- ============================================================
-         SELEZIONE MATERIALE
-         ============================================================ -->
-    <div style="margin: 10px 0;">
-      <label for="material" style="display:block;margin-bottom:5px;font-weight:bold;">Materiale:</label>
-      <select id="material" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:1rem;">
-        <option value="">Seleziona un materiale</option>
-        <option value="PLA+">PLA+</option>
-        <option value="TPU">TPU</option>
-      </select>
-    </div>
-
-    <!-- ============================================================
-         SELEZIONE COLORI (MULTIPLA)
-         ============================================================ -->
-    <div id="colorSelectionContainer" style="display:none;margin:10px 0;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;">
-      <label style="display:block;margin-bottom:8px;font-weight:bold;">Colori disponibili:</label>
-      <div id="colorCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-      <small style="display:block;margin-top:8px;color:#888;">Seleziona uno o più colori</small>
-    </div>
-
     <input type="file" id="image" accept="image/*" />
     <small style="display:block; margin-bottom:12px; color:#888;">
       Carica un'immagine (lascia vuoto per mantenere quella esistente)
@@ -103,44 +78,9 @@
   const COLLECTION_NAME = 'prodotti';
 
   // ============================================================
-  // DEFINIZIONE MATERIALI E COLORI
-  // ============================================================
-  const MATERIALS = {
-    'PLA+': {
-      colors: ['Bianco', 'Marmo', 'Beige', 'Giallo', 'Arancione', 'Rosa', 'Rosso', 'Viola', 'Verde Acqua', 'Verde', 'Azzurro', 'Blu', 'Grigio', 'Marrone', 'Nero', 'Oro', 'Argento', 'Bronzo']
-    },
-    'TPU': {
-      colors: ['Bianco TPU']
-    }
-  };
-
-  const COLOR_DOTS = {
-    'Bianco': '#ffffff',
-    'Marmo': '#E7E9EA',
-    'Beige': '#F5F5DC',
-    'Giallo': '#f1c40f',
-    'Arancione': '#e67e22',
-    'Rosa': '#fd79a8',
-    'Rosso': '#e74c3c',
-    'Viola': '#9b59b6',
-    'Verde Acqua': '#1abc9c',
-    'Verde': '#27ae60',
-    'Azzurro': '#3498db',
-    'Blu': '#2980b9',
-    'Grigio': '#95a5a6',
-    'Marrone': '#8B4513',
-    'Nero': '#000000',
-    'Oro': '#FFD700',
-    'Argento': '#C0C0C0',
-    'Bronzo': '#CD7F32',
-    'Bianco TPU': '#FFFFFF'
-  };
-
-  // ============================================================
   // FUNZIONI DATI (FIREBASE)
   // ============================================================
   
-  // Carica tutti gli articoli da Firebase
   async function loadItems() {
     try {
       console.log('📥 Caricamento da Firebase...');
@@ -152,18 +92,16 @@
         items.push({
           ...data,
           firebaseId: doc.id,
-          id: doc.id  // 🔥 ID uguale al Firebase ID per compatibilità
+          id: doc.id
         });
       });
       
       localStorage.setItem('shopItemsCache', JSON.stringify(items));
-      
       console.log(`✅ Caricati ${items.length} prodotti da Firebase`);
       return items;
     } catch (error) {
       console.error('❌ Errore caricamento:', error);
       setStatus('❌ Errore caricamento dati', 'error');
-      
       const cached = localStorage.getItem('shopItemsCache');
       if (cached) {
         console.log('📦 Usando dati in cache');
@@ -173,20 +111,15 @@
     }
   }
 
-  // Aggiunge un nuovo articolo
   async function addItem(itemData) {
     try {
       console.log('➕ Aggiungo articolo...');
-      
       const { firebaseId, id, ...cleanData } = itemData;
-      
       const newItem = {
         ...cleanData,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      
       const docRef = await db.collection(COLLECTION_NAME).add(newItem);
-      
       console.log(`✅ Articolo aggiunto con ID: ${docRef.id}`);
       return { ...newItem, firebaseId: docRef.id, id: docRef.id };
     } catch (error) {
@@ -195,18 +128,14 @@
     }
   }
 
-  // Aggiorna un articolo esistente
   async function updateItem(firebaseId, itemData) {
     try {
       console.log(`✏️ Aggiorno articolo ${firebaseId}...`);
-      
       const { firebaseId: _, id, ...cleanData } = itemData;
-      
       await db.collection(COLLECTION_NAME).doc(firebaseId).update({
         ...cleanData,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-      
       console.log(`✅ Articolo ${firebaseId} aggiornato`);
       return { ...cleanData, firebaseId, id: firebaseId };
     } catch (error) {
@@ -215,7 +144,6 @@
     }
   }
 
-  // Elimina un articolo
   async function deleteItem(firebaseId) {
     try {
       console.log(`🗑️ Elimino articolo ${firebaseId}...`);
@@ -270,85 +198,6 @@
   }
 
   // ============================================================
-  // AGGIORNA COLORI DISPONIBILI IN BASE AL MATERIALE
-  // ============================================================
-  function updateColorOptions(material) {
-    const container = document.getElementById('colorSelectionContainer');
-    const checkboxesDiv = document.getElementById('colorCheckboxes');
-    
-    if (!material || !MATERIALS[material]) {
-      container.style.display = 'none';
-      return;
-    }
-    
-    container.style.display = 'block';
-    const colors = MATERIALS[material].colors;
-    
-    // Ottieni i colori già selezionati (se in modifica)
-    const editFirebaseId = document.getElementById('editFirebaseId').value;
-    let selectedColors = [];
-    if (editFirebaseId) {
-      loadItems().then(items => {
-        const item = items.find(i => i.firebaseId === editFirebaseId);
-        if (item && item.colors) {
-          selectedColors = item.colors;
-          // Aggiorna i checkbox
-          updateCheckboxes(colors, selectedColors, checkboxesDiv);
-        }
-      });
-    }
-    
-    checkboxesDiv.innerHTML = colors.map(color => `
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:#f0f0f0;padding:4px 12px;border-radius:20px;border:2px solid #ddd;transition:all 0.3s;">
-        <input type="checkbox" value="${color}" ${selectedColors.includes(color) ? 'checked' : ''} 
-               style="display:none;" />
-        <span class="color-dot" style="width:14px;height:14px;border-radius:50%;background:${COLOR_DOTS[color] || '#ccc'};border:1px solid ${color === 'Bianco' || color === 'Marmo' || color === 'Bianco TPU' ? '#ccc' : 'transparent'};display:inline-block;"></span>
-        ${color}
-      </label>
-    `).join('');
-
-    // Aggiungi event listener per evidenziare i colori selezionati
-    checkboxesDiv.querySelectorAll('label').forEach(label => {
-      const checkbox = label.querySelector('input[type="checkbox"]');
-      if (checkbox.checked) {
-        label.style.borderColor = '#27ae60';
-        label.style.background = '#e8f8f0';
-      }
-      
-      checkbox.addEventListener('change', function() {
-        if (this.checked) {
-          label.style.borderColor = '#27ae60';
-          label.style.background = '#e8f8f0';
-        } else {
-          label.style.borderColor = '#ddd';
-          label.style.background = '#f0f0f0';
-        }
-      });
-    });
-  }
-
-  function updateCheckboxes(colors, selectedColors, checkboxesDiv) {
-    checkboxesDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.checked = selectedColors.includes(cb.value);
-      const label = cb.closest('label');
-      if (cb.checked) {
-        label.style.borderColor = '#27ae60';
-        label.style.background = '#e8f8f0';
-      } else {
-        label.style.borderColor = '#ddd';
-        label.style.background = '#f0f0f0';
-      }
-    });
-  }
-
-  // ============================================================
-  // EVENTO CAMBIO MATERIALE
-  // ============================================================
-  document.getElementById('material').addEventListener('change', function() {
-    updateColorOptions(this.value);
-  });
-
-  // ============================================================
   // RENDER LISTA ADMIN
   // ============================================================
   function renderList(items) {
@@ -360,17 +209,10 @@
       return;
     }
     
-    list.innerHTML = items.map(item => {
-      const colors = item.colors || [];
-      const colorDisplay = colors.length > 0 ? 
-        `<span style="font-size:0.8rem;color:#666;">🎨 ${colors.join(', ')}</span>` : '';
-      
-      return `
+    list.innerHTML = items.map(item => `
       <li data-firebase-id="${item.firebaseId}">
         <div class="item-info">
           <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
-          ${item.material ? `<span style="font-size:0.8rem;color:#666;margin-left:8px;">🔧 ${escapeHtml(item.material)}</span>` : ''}
-          ${colorDisplay}
           ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-top:4px;margin-left:10px;">` : ''}
         </div>
         <div class="item-actions">
@@ -378,7 +220,7 @@
           <button class="delete-btn" data-firebase-id="${item.firebaseId}" style="background:#f44336;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🗑️ Rimuovi</button>
         </div>
       </li>
-    `}).join('');
+    `).join('');
 
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
@@ -427,29 +269,6 @@
     document.getElementById('name').value = item.name;
     document.getElementById('description').value = item.description || '';
     document.getElementById('price').value = item.price;
-    document.getElementById('material').value = item.material || '';
-    
-    // Aggiorna i colori disponibili
-    if (item.material && MATERIALS[item.material]) {
-      updateColorOptions(item.material);
-      // Seleziona i colori dell'articolo
-      setTimeout(() => {
-        const checkboxes = document.querySelectorAll('#colorCheckboxes input[type="checkbox"]');
-        checkboxes.forEach(cb => {
-          cb.checked = item.colors && item.colors.includes(cb.value);
-          const label = cb.closest('label');
-          if (cb.checked) {
-            label.style.borderColor = '#27ae60';
-            label.style.background = '#e8f8f0';
-          } else {
-            label.style.borderColor = '#ddd';
-            label.style.background = '#f0f0f0';
-          }
-        });
-      }, 100);
-    } else {
-      document.getElementById('colorSelectionContainer').style.display = 'none';
-    }
     
     const preview = document.getElementById('imagePreview');
     if (item.image) {
@@ -486,7 +305,6 @@
     document.getElementById('cancelBtn').style.display = 'none';
     document.getElementById('message').textContent = '';
     document.getElementById('message').className = '';
-    document.getElementById('colorSelectionContainer').style.display = 'none';
   }
 
   // ============================================================
@@ -517,15 +335,10 @@
     const name = document.getElementById('name').value.trim();
     const description = document.getElementById('description').value.trim();
     const price = parseFloat(document.getElementById('price').value) || 0;
-    const material = document.getElementById('material').value;
     const fileInput = document.getElementById('image');
     const file = fileInput.files[0];
     const statusDiv = document.getElementById('uploadStatus');
     const messageDiv = document.getElementById('message');
-
-    // Raccogli i colori selezionati
-    const colorCheckboxes = document.querySelectorAll('#colorCheckboxes input[type="checkbox"]:checked');
-    const selectedColors = Array.from(colorCheckboxes).map(cb => cb.value);
 
     if (!name) {
       messageDiv.textContent = '❌ Nome obbligatorio.';
@@ -565,8 +378,6 @@
           name: name,
           description: description || '',
           price: price,
-          material: material || '',
-          colors: selectedColors,
           image: imageUrl || existingItem.image || ''
         };
         
@@ -579,8 +390,6 @@
           name: name,
           description: description || '',
           price: price,
-          material: material || '',
-          colors: selectedColors,
           image: imageUrl || ''
         };
         
@@ -596,7 +405,6 @@
       document.getElementById('addForm').reset();
       document.getElementById('imagePreview').innerHTML = '';
       statusDiv.textContent = '';
-      document.getElementById('colorSelectionContainer').style.display = 'none';
       
       localStorage.setItem('shopItemsUpdated', Date.now().toString());
       
