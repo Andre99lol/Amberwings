@@ -30,6 +30,7 @@
     // Inizializza Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    console.log('✅ Firebase inizializzato');
   </script>
 </head>
 <body>
@@ -50,6 +51,27 @@
     <input type="text" id="description" placeholder="Descrizione" />
     <input type="number" id="price" placeholder="Prezzo" step="0.01" />
     
+    <!-- ============================================================
+         SELEZIONE MATERIALE
+         ============================================================ -->
+    <div style="margin: 10px 0;">
+      <label for="material" style="display:block;margin-bottom:5px;font-weight:bold;">Materiale:</label>
+      <select id="material" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:1rem;">
+        <option value="">Seleziona un materiale</option>
+        <option value="PLA+">PLA+</option>
+        <option value="TPU">TPU</option>
+      </select>
+    </div>
+
+    <!-- ============================================================
+         SELEZIONE COLORI (MULTIPLA)
+         ============================================================ -->
+    <div id="colorSelectionContainer" style="display:none;margin:10px 0;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;">
+      <label style="display:block;margin-bottom:8px;font-weight:bold;">Colori disponibili:</label>
+      <div id="colorCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      <small style="display:block;margin-top:8px;color:#888;">Seleziona uno o più colori</small>
+    </div>
+
     <input type="file" id="image" accept="image/*" />
     <small style="display:block; margin-bottom:12px; color:#888;">
       Carica un'immagine (lascia vuoto per mantenere quella esistente)
@@ -81,7 +103,41 @@
   const COLLECTION_NAME = 'prodotti';
 
   // ============================================================
-  // FUNZIONI DATI (FIREBASE) - NUOVA VERSIONE PULITA
+  // DEFINIZIONE MATERIALI E COLORI
+  // ============================================================
+  const MATERIALS = {
+    'PLA+': {
+      colors: ['Bianco', 'Marmo', 'Beige', 'Giallo', 'Arancione', 'Rosa', 'Rosso', 'Viola', 'Verde Acqua', 'Verde', 'Azzurro', 'Blu', 'Grigio', 'Marrone', 'Nero', 'Oro', 'Argento', 'Bronzo']
+    },
+    'TPU': {
+      colors: ['Bianco TPU']
+    }
+  };
+
+  const COLOR_DOTS = {
+    'Bianco': '#ffffff',
+    'Marmo': '#E7E9EA',
+    'Beige': '#F5F5DC',
+    'Giallo': '#f1c40f',
+    'Arancione': '#e67e22',
+    'Rosa': '#fd79a8',
+    'Rosso': '#e74c3c',
+    'Viola': '#9b59b6',
+    'Verde Acqua': '#1abc9c',
+    'Verde': '#27ae60',
+    'Azzurro': '#3498db',
+    'Blu': '#2980b9',
+    'Grigio': '#95a5a6',
+    'Marrone': '#8B4513',
+    'Nero': '#000000',
+    'Oro': '#FFD700',
+    'Argento': '#C0C0C0',
+    'Bronzo': '#CD7F32',
+    'Bianco TPU': '#FFFFFF'
+  };
+
+  // ============================================================
+  // FUNZIONI DATI (FIREBASE)
   // ============================================================
   
   // Carica tutti gli articoli da Firebase
@@ -93,14 +149,13 @@
       const items = [];
       snapshot.forEach(doc => {
         const data = doc.data();
-        // Aggiungiamo l'ID Firebase al dato
         items.push({
           ...data,
-          firebaseId: doc.id  // ID univoco di Firebase
+          firebaseId: doc.id,
+          id: doc.id  // 🔥 ID uguale al Firebase ID per compatibilità
         });
       });
       
-      // Salva in cache locale
       localStorage.setItem('shopItemsCache', JSON.stringify(items));
       
       console.log(`✅ Caricati ${items.length} prodotti da Firebase`);
@@ -109,7 +164,6 @@
       console.error('❌ Errore caricamento:', error);
       setStatus('❌ Errore caricamento dati', 'error');
       
-      // Prova a caricare dalla cache
       const cached = localStorage.getItem('shopItemsCache');
       if (cached) {
         console.log('📦 Usando dati in cache');
@@ -124,20 +178,17 @@
     try {
       console.log('➕ Aggiungo articolo...');
       
-      // Rimuovi firebaseId se presente (non deve essere salvato nel documento)
-      const { firebaseId, ...cleanData } = itemData;
+      const { firebaseId, id, ...cleanData } = itemData;
       
-      // Aggiungi timestamp
       const newItem = {
         ...cleanData,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
       
-      // Crea documento con ID automatico
       const docRef = await db.collection(COLLECTION_NAME).add(newItem);
       
       console.log(`✅ Articolo aggiunto con ID: ${docRef.id}`);
-      return { ...newItem, firebaseId: docRef.id };
+      return { ...newItem, firebaseId: docRef.id, id: docRef.id };
     } catch (error) {
       console.error('❌ Errore aggiunta:', error);
       throw error;
@@ -149,17 +200,15 @@
     try {
       console.log(`✏️ Aggiorno articolo ${firebaseId}...`);
       
-      // Rimuovi firebaseId se presente
-      const { firebaseId: _, ...cleanData } = itemData;
+      const { firebaseId: _, id, ...cleanData } = itemData;
       
-      // Aggiorna il documento
       await db.collection(COLLECTION_NAME).doc(firebaseId).update({
         ...cleanData,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       
       console.log(`✅ Articolo ${firebaseId} aggiornato`);
-      return { ...cleanData, firebaseId };
+      return { ...cleanData, firebaseId, id: firebaseId };
     } catch (error) {
       console.error('❌ Errore aggiornamento:', error);
       throw error;
@@ -221,6 +270,85 @@
   }
 
   // ============================================================
+  // AGGIORNA COLORI DISPONIBILI IN BASE AL MATERIALE
+  // ============================================================
+  function updateColorOptions(material) {
+    const container = document.getElementById('colorSelectionContainer');
+    const checkboxesDiv = document.getElementById('colorCheckboxes');
+    
+    if (!material || !MATERIALS[material]) {
+      container.style.display = 'none';
+      return;
+    }
+    
+    container.style.display = 'block';
+    const colors = MATERIALS[material].colors;
+    
+    // Ottieni i colori già selezionati (se in modifica)
+    const editFirebaseId = document.getElementById('editFirebaseId').value;
+    let selectedColors = [];
+    if (editFirebaseId) {
+      loadItems().then(items => {
+        const item = items.find(i => i.firebaseId === editFirebaseId);
+        if (item && item.colors) {
+          selectedColors = item.colors;
+          // Aggiorna i checkbox
+          updateCheckboxes(colors, selectedColors, checkboxesDiv);
+        }
+      });
+    }
+    
+    checkboxesDiv.innerHTML = colors.map(color => `
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:#f0f0f0;padding:4px 12px;border-radius:20px;border:2px solid #ddd;transition:all 0.3s;">
+        <input type="checkbox" value="${color}" ${selectedColors.includes(color) ? 'checked' : ''} 
+               style="display:none;" />
+        <span class="color-dot" style="width:14px;height:14px;border-radius:50%;background:${COLOR_DOTS[color] || '#ccc'};border:1px solid ${color === 'Bianco' || color === 'Marmo' || color === 'Bianco TPU' ? '#ccc' : 'transparent'};display:inline-block;"></span>
+        ${color}
+      </label>
+    `).join('');
+
+    // Aggiungi event listener per evidenziare i colori selezionati
+    checkboxesDiv.querySelectorAll('label').forEach(label => {
+      const checkbox = label.querySelector('input[type="checkbox"]');
+      if (checkbox.checked) {
+        label.style.borderColor = '#27ae60';
+        label.style.background = '#e8f8f0';
+      }
+      
+      checkbox.addEventListener('change', function() {
+        if (this.checked) {
+          label.style.borderColor = '#27ae60';
+          label.style.background = '#e8f8f0';
+        } else {
+          label.style.borderColor = '#ddd';
+          label.style.background = '#f0f0f0';
+        }
+      });
+    });
+  }
+
+  function updateCheckboxes(colors, selectedColors, checkboxesDiv) {
+    checkboxesDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = selectedColors.includes(cb.value);
+      const label = cb.closest('label');
+      if (cb.checked) {
+        label.style.borderColor = '#27ae60';
+        label.style.background = '#e8f8f0';
+      } else {
+        label.style.borderColor = '#ddd';
+        label.style.background = '#f0f0f0';
+      }
+    });
+  }
+
+  // ============================================================
+  // EVENTO CAMBIO MATERIALE
+  // ============================================================
+  document.getElementById('material').addEventListener('change', function() {
+    updateColorOptions(this.value);
+  });
+
+  // ============================================================
   // RENDER LISTA ADMIN
   // ============================================================
   function renderList(items) {
@@ -232,10 +360,17 @@
       return;
     }
     
-    list.innerHTML = items.map(item => `
+    list.innerHTML = items.map(item => {
+      const colors = item.colors || [];
+      const colorDisplay = colors.length > 0 ? 
+        `<span style="font-size:0.8rem;color:#666;">🎨 ${colors.join(', ')}</span>` : '';
+      
+      return `
       <li data-firebase-id="${item.firebaseId}">
         <div class="item-info">
           <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
+          ${item.material ? `<span style="font-size:0.8rem;color:#666;margin-left:8px;">🔧 ${escapeHtml(item.material)}</span>` : ''}
+          ${colorDisplay}
           ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-top:4px;margin-left:10px;">` : ''}
         </div>
         <div class="item-actions">
@@ -243,9 +378,8 @@
           <button class="delete-btn" data-firebase-id="${item.firebaseId}" style="background:#f44336;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🗑️ Rimuovi</button>
         </div>
       </li>
-    `).join('');
+    `}).join('');
 
-    // Event listener per modifica
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -254,7 +388,6 @@
       });
     });
 
-    // Event listener per eliminazione
     document.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -290,13 +423,34 @@
       return; 
     }
 
-    // Popola il form con i dati dell'articolo
     document.getElementById('editFirebaseId').value = firebaseId;
     document.getElementById('name').value = item.name;
     document.getElementById('description').value = item.description || '';
     document.getElementById('price').value = item.price;
+    document.getElementById('material').value = item.material || '';
     
-    // Mostra anteprima immagine attuale
+    // Aggiorna i colori disponibili
+    if (item.material && MATERIALS[item.material]) {
+      updateColorOptions(item.material);
+      // Seleziona i colori dell'articolo
+      setTimeout(() => {
+        const checkboxes = document.querySelectorAll('#colorCheckboxes input[type="checkbox"]');
+        checkboxes.forEach(cb => {
+          cb.checked = item.colors && item.colors.includes(cb.value);
+          const label = cb.closest('label');
+          if (cb.checked) {
+            label.style.borderColor = '#27ae60';
+            label.style.background = '#e8f8f0';
+          } else {
+            label.style.borderColor = '#ddd';
+            label.style.background = '#f0f0f0';
+          }
+        });
+      }, 100);
+    } else {
+      document.getElementById('colorSelectionContainer').style.display = 'none';
+    }
+    
     const preview = document.getElementById('imagePreview');
     if (item.image) {
       preview.innerHTML = `
@@ -310,7 +464,6 @@
       preview.innerHTML = '';
     }
 
-    // Aggiorna il form per la modifica
     document.getElementById('formTitle').textContent = '✏️ Modifica articolo';
     document.getElementById('submitBtn').textContent = '💾 Salva modifiche';
     document.getElementById('cancelBtn').style.display = 'inline-block';
@@ -333,6 +486,7 @@
     document.getElementById('cancelBtn').style.display = 'none';
     document.getElementById('message').textContent = '';
     document.getElementById('message').className = '';
+    document.getElementById('colorSelectionContainer').style.display = 'none';
   }
 
   // ============================================================
@@ -343,20 +497,18 @@
     
     try {
       await deleteItem(firebaseId);
-      
-      // Ricarica la lista
       const items = await loadItems();
       renderList(items);
       cancelEdit();
-      
       setStatus(`✅ Articolo eliminato con successo`, 'success');
+      localStorage.setItem('shopItemsUpdated', Date.now().toString());
     } catch (error) {
       setStatus(`❌ Errore nell'eliminazione: ${error.message}`, 'error');
     }
   }
 
   // ============================================================
-  // AGGIUNGI/MODIFICA ARTICOLO - NUOVA VERSIONE
+  // AGGIUNGI/MODIFICA ARTICOLO
   // ============================================================
   document.getElementById('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -365,12 +517,16 @@
     const name = document.getElementById('name').value.trim();
     const description = document.getElementById('description').value.trim();
     const price = parseFloat(document.getElementById('price').value) || 0;
+    const material = document.getElementById('material').value;
     const fileInput = document.getElementById('image');
     const file = fileInput.files[0];
     const statusDiv = document.getElementById('uploadStatus');
     const messageDiv = document.getElementById('message');
 
-    // Validazione
+    // Raccogli i colori selezionati
+    const colorCheckboxes = document.querySelectorAll('#colorCheckboxes input[type="checkbox"]:checked');
+    const selectedColors = Array.from(colorCheckboxes).map(cb => cb.value);
+
     if (!name) {
       messageDiv.textContent = '❌ Nome obbligatorio.';
       messageDiv.className = 'error';
@@ -379,7 +535,6 @@
 
     let imageUrl = '';
 
-    // Upload immagine se presente
     if (file) {
       statusDiv.textContent = '⏳ Caricamento su Cloudinary...';
       statusDiv.style.color = '#ff9800';
@@ -399,7 +554,6 @@
       let items = await loadItems();
       
       if (firebaseId) {
-        // MODIFICA - Trova l'articolo esistente per mantenere l'immagine se non ne viene caricata una nuova
         const existingItem = items.find(i => i.firebaseId === firebaseId);
         if (!existingItem) {
           messageDiv.textContent = '❌ Articolo non trovato!';
@@ -407,12 +561,12 @@
           return;
         }
         
-        // Prepara i dati da aggiornare
         const updatedData = {
           name: name,
           description: description || '',
           price: price,
-          // Se è stata caricata una nuova immagine, usala; altrimenti mantieni quella esistente
+          material: material || '',
+          colors: selectedColors,
           image: imageUrl || existingItem.image || ''
         };
         
@@ -421,30 +575,29 @@
         messageDiv.className = 'success';
         
       } else {
-        // AGGIUNTA - Nuovo articolo
         const newItemData = {
           name: name,
           description: description || '',
           price: price,
+          material: material || '',
+          colors: selectedColors,
           image: imageUrl || ''
         };
         
-        const newItem = await addItem(newItemData);
+        await addItem(newItemData);
         messageDiv.textContent = `✅ Articolo aggiunto con successo!`;
         messageDiv.className = 'success';
       }
 
-      // Ricarica la lista e resetta il form
       const updatedItems = await loadItems();
       renderList(updatedItems);
       cancelEdit();
       
-      // Reset del form
       document.getElementById('addForm').reset();
       document.getElementById('imagePreview').innerHTML = '';
       statusDiv.textContent = '';
+      document.getElementById('colorSelectionContainer').style.display = 'none';
       
-      // Aggiorna la cache
       localStorage.setItem('shopItemsUpdated', Date.now().toString());
       
     } catch (error) {
@@ -474,7 +627,6 @@
       };
       reader.readAsDataURL(file);
     } else {
-      // Se l'utente rimuove il file, mostra di nuovo l'immagine attuale se in modifica
       const firebaseId = document.getElementById('editFirebaseId').value;
       if (firebaseId) {
         loadItems().then(items => {
