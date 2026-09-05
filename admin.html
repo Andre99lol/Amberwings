@@ -12,10 +12,11 @@
        ============================================================ -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   
   <script>
     // ============================================================
-    // CONFIGURAZIONE FIREBASE (DA CONSOLE FIREBASE)
+    // CONFIGURAZIONE FIREBASE
     // ============================================================
     const firebaseConfig = {
       apiKey: "AIzaSyAsMApyZ7qFSsc0tc8mjwjjk1lFI0F-IlE",
@@ -30,6 +31,9 @@
     // Inizializza Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const auth = firebase.auth();
+    
+    console.log('✅ Firebase inizializzato correttamente');
   </script>
 </head>
 <body>
@@ -79,6 +83,30 @@
   const CLOUDINARY_UPLOAD_PRESET = 'Amberwings';
   const SESSION_KEY = 'loggedIn';
   const COLLECTION_NAME = 'prodotti';
+
+  // ============================================================
+  // PROTEGGI PAGINA CON FIREBASE AUTH
+  // ============================================================
+  auth.onAuthStateChanged(user => {
+    if (!user) {
+      console.log('🔒 Utente non autenticato, reindirizzamento al login...');
+      window.location.href = 'login.html';
+    } else {
+      console.log('✅ Utente autenticato:', user.email);
+      // Carica i dati solo dopo l'autenticazione
+      loadData();
+    }
+  });
+
+  // Controllo aggiuntivo per localStorage (backup)
+  if (!localStorage.getItem(SESSION_KEY)) {
+    // Se non c'è il flag in localStorage ma l'utente è autenticato, lo settiamo
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        localStorage.setItem(SESSION_KEY, 'true');
+      }
+    });
+  }
 
   // ============================================================
   // FUNZIONI DATI (FIREBASE)
@@ -420,25 +448,35 @@
   document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
 
   // ============================================================
-  // LOGOUT
+  // LOGOUT CON FIREBASE
   // ============================================================
-  document.getElementById('logoutLink').addEventListener('click', (e) => {
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
+    
+    try {
+      await auth.signOut();
+      console.log('✅ Logout effettuato');
+    } catch (error) {
+      console.error('❌ Errore logout:', error);
+    }
+    
     localStorage.removeItem(SESSION_KEY);
     window.location.href = 'index.html';
   });
 
   // ============================================================
-  // PROTEGGI PAGINA
+  // PROTEGGI PAGINA (controllo aggiuntivo)
   // ============================================================
-  if (localStorage.getItem(SESSION_KEY) !== 'true') {
-    window.location.href = 'login.html';
-  }
+  // Se l'utente non è autenticato ma ha localStorage=true, lo rimuoviamo
+  auth.onAuthStateChanged(user => {
+    if (!user && localStorage.getItem(SESSION_KEY) === 'true') {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  });
 
-  // ============================================================
-  // INIT
-  // ============================================================
-  document.addEventListener('DOMContentLoaded', loadData);
+  console.log('✅ Admin.html caricato correttamente');
+  console.log('📦 Firebase Firestore:', db);
+  console.log('🔐 Firebase Auth:', auth);
 </script>
 </body>
 </html>
