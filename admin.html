@@ -45,7 +45,7 @@
 <section class="form-section">
   <h2 id="formTitle">➕ Aggiungi nuovo articolo</h2>
   <form id="addForm">
-    <input type="hidden" id="editId" value="" />
+    <input type="hidden" id="editFirebaseId" value="" />
     <input type="text" id="name" placeholder="Nome *" required />
     <input type="text" id="description" placeholder="Descrizione" />
     <input type="number" id="price" placeholder="Prezzo" step="0.01" />
@@ -81,18 +81,26 @@
   const COLLECTION_NAME = 'prodotti';
 
   // ============================================================
-  // FUNZIONI DATI (FIREBASE)
+  // FUNZIONI DATI (FIREBASE) - NUOVA VERSIONE PULITA
   // ============================================================
+  
+  // Carica tutti gli articoli da Firebase
   async function loadItems() {
     try {
       console.log('📥 Caricamento da Firebase...');
       
-      const snapshot = await db.collection(COLLECTION_NAME).orderBy('id').get();
+      const snapshot = await db.collection(COLLECTION_NAME).orderBy('createdAt', 'desc').get();
       const items = [];
       snapshot.forEach(doc => {
-        items.push(doc.data());
+        const data = doc.data();
+        // Aggiungiamo l'ID Firebase al dato
+        items.push({
+          ...data,
+          firebaseId: doc.id  // ID univoco di Firebase
+        });
       });
       
+      // Salva in cache locale
       localStorage.setItem('shopItemsCache', JSON.stringify(items));
       
       console.log(`✅ Caricati ${items.length} prodotti da Firebase`);
@@ -100,37 +108,72 @@
     } catch (error) {
       console.error('❌ Errore caricamento:', error);
       setStatus('❌ Errore caricamento dati', 'error');
+      
+      // Prova a caricare dalla cache
       const cached = localStorage.getItem('shopItemsCache');
-      return cached ? JSON.parse(cached) : [];
+      if (cached) {
+        console.log('📦 Usando dati in cache');
+        return JSON.parse(cached);
+      }
+      return [];
     }
   }
 
-  async function saveItems(items) {
+  // Aggiunge un nuovo articolo
+  async function addItem(itemData) {
     try {
-      console.log('💾 Salvataggio su Firebase...');
+      console.log('➕ Aggiungo articolo...');
       
-      // Cancella tutti i documenti esistenti
-      const snapshot = await db.collection(COLLECTION_NAME).get();
-      const batch = db.batch();
-      snapshot.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
+      // Rimuovi firebaseId se presente (non deve essere salvato nel documento)
+      const { firebaseId, ...cleanData } = itemData;
       
-      // Aggiungi i nuovi documenti
-      for (const item of items) {
-        await db.collection(COLLECTION_NAME).doc(String(item.id)).set(item);
-      }
+      // Aggiungi timestamp
+      const newItem = {
+        ...cleanData,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
       
-      localStorage.setItem('shopItemsCache', JSON.stringify(items));
-      localStorage.setItem('shopItemsUpdated', Date.now().toString());
+      // Crea documento con ID automatico
+      const docRef = await db.collection(COLLECTION_NAME).add(newItem);
       
-      setStatus(`✅ ${items.length} articoli salvati su Firebase`, 'success');
-      console.log('✅ Salvataggio completato su Firebase!');
-      return items;
+      console.log(`✅ Articolo aggiunto con ID: ${docRef.id}`);
+      return { ...newItem, firebaseId: docRef.id };
     } catch (error) {
-      console.error('❌ Errore salvataggio:', error);
-      setStatus('❌ Errore salvataggio', 'error');
+      console.error('❌ Errore aggiunta:', error);
+      throw error;
+    }
+  }
+
+  // Aggiorna un articolo esistente
+  async function updateItem(firebaseId, itemData) {
+    try {
+      console.log(`✏️ Aggiorno articolo ${firebaseId}...`);
+      
+      // Rimuovi firebaseId se presente
+      const { firebaseId: _, ...cleanData } = itemData;
+      
+      // Aggiorna il documento
+      await db.collection(COLLECTION_NAME).doc(firebaseId).update({
+        ...cleanData,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      console.log(`✅ Articolo ${firebaseId} aggiornato`);
+      return { ...cleanData, firebaseId };
+    } catch (error) {
+      console.error('❌ Errore aggiornamento:', error);
+      throw error;
+    }
+  }
+
+  // Elimina un articolo
+  async function deleteItem(firebaseId) {
+    try {
+      console.log(`🗑️ Elimino articolo ${firebaseId}...`);
+      await db.collection(COLLECTION_NAME).doc(firebaseId).delete();
+      console.log(`✅ Articolo ${firebaseId} eliminato`);
+    } catch (error) {
+      console.error('❌ Errore eliminazione:', error);
       throw error;
     }
   }
@@ -190,31 +233,33 @@
     }
     
     list.innerHTML = items.map(item => `
-      <li data-id="${item.id}">
+      <li data-firebase-id="${item.firebaseId}">
         <div class="item-info">
           <strong>${escapeHtml(item.name)}</strong> – € ${Number(item.price).toFixed(2)}
           ${item.image ? `<img src="${escapeHtml(item.image)}" style="max-width:40px;max-height:40px;border-radius:4px;margin-top:4px;margin-left:10px;">` : ''}
         </div>
         <div class="item-actions">
-          <button class="edit-btn" data-id="${item.id}" style="background:#2196F3;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">✏️ Modifica</button>
-          <button class="delete-btn" data-id="${item.id}" style="background:#f44336;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🗑️ Rimuovi</button>
+          <button class="edit-btn" data-firebase-id="${item.firebaseId}" style="background:#2196F3;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">✏️ Modifica</button>
+          <button class="delete-btn" data-firebase-id="${item.firebaseId}" style="background:#f44336;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🗑️ Rimuovi</button>
         </div>
       </li>
     `).join('');
 
+    // Event listener per modifica
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const id = parseInt(this.dataset.id);
-        editItem(id);
+        const firebaseId = this.dataset.firebaseId;
+        editItem(firebaseId);
       });
     });
 
+    // Event listener per eliminazione
     document.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const id = parseInt(this.dataset.id);
-        removeItem(id);
+        const firebaseId = this.dataset.firebaseId;
+        removeItem(firebaseId);
       });
     });
   }
@@ -237,16 +282,21 @@
   // ============================================================
   // MODIFICA ARTICOLO
   // ============================================================
-  async function editItem(id) {
+  async function editItem(firebaseId) {
     const items = await loadItems();
-    const item = items.find(i => i.id === id);
-    if (!item) { alert('Articolo non trovato!'); return; }
+    const item = items.find(i => i.firebaseId === firebaseId);
+    if (!item) { 
+      alert('Articolo non trovato!'); 
+      return; 
+    }
 
-    document.getElementById('editId').value = item.id;
+    // Popola il form con i dati dell'articolo
+    document.getElementById('editFirebaseId').value = firebaseId;
     document.getElementById('name').value = item.name;
     document.getElementById('description').value = item.description || '';
     document.getElementById('price').value = item.price;
     
+    // Mostra anteprima immagine attuale
     const preview = document.getElementById('imagePreview');
     if (item.image) {
       preview.innerHTML = `
@@ -260,6 +310,7 @@
       preview.innerHTML = '';
     }
 
+    // Aggiorna il form per la modifica
     document.getElementById('formTitle').textContent = '✏️ Modifica articolo';
     document.getElementById('submitBtn').textContent = '💾 Salva modifiche';
     document.getElementById('cancelBtn').style.display = 'inline-block';
@@ -274,7 +325,7 @@
   // ============================================================
   function cancelEdit() {
     document.getElementById('addForm').reset();
-    document.getElementById('editId').value = '';
+    document.getElementById('editFirebaseId').value = '';
     document.getElementById('imagePreview').innerHTML = '';
     document.getElementById('uploadStatus').textContent = '';
     document.getElementById('formTitle').textContent = '➕ Aggiungi nuovo articolo';
@@ -287,22 +338,30 @@
   // ============================================================
   // RIMUOVI ARTICOLO
   // ============================================================
-  async function removeItem(id) {
+  async function removeItem(firebaseId) {
     if (!confirm('Rimuovere questo articolo?')) return;
-    let items = await loadItems();
-    items = items.filter(item => item.id !== id);
-    await saveItems(items);
-    renderList(items);
-    cancelEdit();
+    
+    try {
+      await deleteItem(firebaseId);
+      
+      // Ricarica la lista
+      const items = await loadItems();
+      renderList(items);
+      cancelEdit();
+      
+      setStatus(`✅ Articolo eliminato con successo`, 'success');
+    } catch (error) {
+      setStatus(`❌ Errore nell'eliminazione: ${error.message}`, 'error');
+    }
   }
 
   // ============================================================
-  // AGGIUNGI/MODIFICA ARTICOLO
+  // AGGIUNGI/MODIFICA ARTICOLO - NUOVA VERSIONE
   // ============================================================
   document.getElementById('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const editId = document.getElementById('editId').value;
+    const firebaseId = document.getElementById('editFirebaseId').value;
     const name = document.getElementById('name').value.trim();
     const description = document.getElementById('description').value.trim();
     const price = parseFloat(document.getElementById('price').value) || 0;
@@ -311,6 +370,7 @@
     const statusDiv = document.getElementById('uploadStatus');
     const messageDiv = document.getElementById('message');
 
+    // Validazione
     if (!name) {
       messageDiv.textContent = '❌ Nome obbligatorio.';
       messageDiv.className = 'error';
@@ -319,6 +379,7 @@
 
     let imageUrl = '';
 
+    // Upload immagine se presente
     if (file) {
       statusDiv.textContent = '⏳ Caricamento su Cloudinary...';
       statusDiv.style.color = '#ff9800';
@@ -334,44 +395,63 @@
       }
     }
 
-    let items = await loadItems();
-
-    if (editId) {
-      const index = items.findIndex(i => i.id === parseInt(editId));
-      if (index === -1) {
-        messageDiv.textContent = '❌ Articolo non trovato!';
-        messageDiv.className = 'error';
-        return;
+    try {
+      let items = await loadItems();
+      
+      if (firebaseId) {
+        // MODIFICA - Trova l'articolo esistente per mantenere l'immagine se non ne viene caricata una nuova
+        const existingItem = items.find(i => i.firebaseId === firebaseId);
+        if (!existingItem) {
+          messageDiv.textContent = '❌ Articolo non trovato!';
+          messageDiv.className = 'error';
+          return;
+        }
+        
+        // Prepara i dati da aggiornare
+        const updatedData = {
+          name: name,
+          description: description || '',
+          price: price,
+          // Se è stata caricata una nuova immagine, usala; altrimenti mantieni quella esistente
+          image: imageUrl || existingItem.image || ''
+        };
+        
+        await updateItem(firebaseId, updatedData);
+        messageDiv.textContent = '✅ Articolo modificato con successo!';
+        messageDiv.className = 'success';
+        
+      } else {
+        // AGGIUNTA - Nuovo articolo
+        const newItemData = {
+          name: name,
+          description: description || '',
+          price: price,
+          image: imageUrl || ''
+        };
+        
+        const newItem = await addItem(newItemData);
+        messageDiv.textContent = `✅ Articolo aggiunto con successo!`;
+        messageDiv.className = 'success';
       }
-      items[index].name = name;
-      items[index].description = description || '';
-      items[index].price = price;
-      if (imageUrl) items[index].image = imageUrl;
-      messageDiv.textContent = '✅ Articolo modificato!';
-      messageDiv.className = 'success';
-    } else {
-      const maxId = items.length > 0 ? Math.max(...items.map(i => i.id)) : 0;
-      const newItem = {
-        id: maxId + 1,
-        name,
-        description: description || '',
-        price: price,
-        image: imageUrl,
-        createdAt: new Date().toISOString()
-      };
-      items.push(newItem);
-      messageDiv.textContent = `✅ Articolo aggiunto! (ID: ${newItem.id})`;
-      messageDiv.className = 'success';
-    }
 
-    await saveItems(items);
-    renderList(items);
-    cancelEdit();
-    document.getElementById('addForm').reset();
-    document.getElementById('imagePreview').innerHTML = '';
-    statusDiv.textContent = '';
-    
-    localStorage.setItem('shopItemsUpdated', Date.now().toString());
+      // Ricarica la lista e resetta il form
+      const updatedItems = await loadItems();
+      renderList(updatedItems);
+      cancelEdit();
+      
+      // Reset del form
+      document.getElementById('addForm').reset();
+      document.getElementById('imagePreview').innerHTML = '';
+      statusDiv.textContent = '';
+      
+      // Aggiorna la cache
+      localStorage.setItem('shopItemsUpdated', Date.now().toString());
+      
+    } catch (error) {
+      messageDiv.textContent = `❌ Errore: ${error.message}`;
+      messageDiv.className = 'error';
+      console.error('Errore nel submit:', error);
+    }
   });
 
   // ============================================================
@@ -380,6 +460,7 @@
   document.getElementById('image').addEventListener('change', (e) => {
     const preview = document.getElementById('imagePreview');
     const file = e.target.files[0];
+    
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -393,10 +474,11 @@
       };
       reader.readAsDataURL(file);
     } else {
-      const editId = document.getElementById('editId').value;
-      if (editId) {
+      // Se l'utente rimuove il file, mostra di nuovo l'immagine attuale se in modifica
+      const firebaseId = document.getElementById('editFirebaseId').value;
+      if (firebaseId) {
         loadItems().then(items => {
-          const item = items.find(i => i.id === parseInt(editId));
+          const item = items.find(i => i.firebaseId === firebaseId);
           if (item && item.image) {
             preview.innerHTML = `
               <div>
