@@ -374,21 +374,21 @@
     // ============================================================
     // TESTO DEL MESSAGGIO CON MATERIALI E COLORI SCELTI DAL CLIENTE
     // ============================================================
-    let message = '🦋 *Richiesta informazioni AmberWings* 🦋\n\n';
-    message += 'Salve, vorrei ricevere informazioni sui seguenti articoli:\n\n';
+    let message = '*Richiesta informazioni AmberWings* \n\n';
+    message += '> Salve, vorrei ricevere informazioni sui seguenti articoli:\n\n';
     
     selectedItems.forEach((item) => {
       const material = item.clienteMateriale || 'Non selezionato';
       const colors = item.clienteColori || [];
       const colorText = colors.length > 0 ? ` (Colori: ${colors.join(', ')})` : ' (Nessun colore selezionato)';
       
-      message += `📦 *${item.name}*\n`;
-      message += `  🔧 Materiale: ${material}${colorText}\n`;
-      if (item.price) message += `  💰 Prezzo: € ${Number(item.price).toFixed(2)}\n`;
-      if (item.description) message += `  📝 Note: ${item.description}\n`;
+      message += `• *${item.name}*\n`;
+      message += ` • Materiale: ${material}${colorText}\n`;
+      if (item.price) message += `• Prezzo: € ${Number(item.price).toFixed(2)}\n`;
+      if (item.description) message += `• Note: ${item.description}\n`;
       message += '\n';
     });
-    message += 'Grazie mille! 🙏';
+    message += 'Grazie mille!';
 
     // Cerchiamo la prima immagine valida
     const itemWithImage = selectedItems.find(i => i.image && i.image.trim() !== '');
